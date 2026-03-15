@@ -82,6 +82,12 @@ class BybitExchange(BaseExchange):
 
                                 # Store historical data using base class method
                                 self._store_historical_price(canonical_symbol, price)
+                                self._notify_detectors_price(canonical_symbol, price)
+
+                                # Volume tracking (24h turnover in USDT)
+                                turnover = data["data"].get("turnover24h")
+                                if turnover:
+                                    self._notify_detectors_volume(canonical_symbol, float(turnover))
 
                         except Exception as e:
                             logging.error(f"Bybit WebSocket data processing error: {e}")

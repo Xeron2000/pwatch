@@ -9,8 +9,8 @@ from typing import List, Optional, Set, Tuple
 
 from pwatch.core.config_manager import ConfigUpdateEvent, config_manager
 from pwatch.core.notifier import Notifier
+from pwatch.detectors import AnomalyEvent, PriceVelocityDetector, VolumeSpikeDetector
 from pwatch.utils.cache_manager import notification_cooldown
-from pwatch.utils.chart import generate_multi_candlestick_png
 from pwatch.utils.config_validator import config_validator
 from pwatch.utils.error_handler import ErrorSeverity, error_handler
 from pwatch.utils.get_exchange import get_exchange
@@ -44,6 +44,9 @@ class PriceSentry:
             # Track auto mode and last refresh time
             self._auto_mode: bool = False
             self._last_auto_refresh: float = 0
+
+            # Anomaly event queue (fed by detectors running in WS thread)
+            self._anomaly_events: "Queue[AnomalyEvent]" = Queue()
 
             # Load configuration (patchable for unit tests while defaulting to manager data)
             self.config = load_config()
@@ -107,6 +110,7 @@ class PriceSentry:
                 return
 
             self._refresh_runtime_settings()
+            self._setup_detectors()
 
             config_manager.subscribe(self._enqueue_config_update)
             logging.info("PriceSentry initialized successfully")
@@ -157,6 +161,9 @@ class PriceSentry:
             while True:
                 self._process_config_updates()
 
+                # Process real-time anomaly events from detectors
+                await self._process_anomaly_events()
+
                 # Check for auto mode refresh (every 4 hours)
                 if self._auto_mode:
                     self._check_auto_refresh()
@@ -197,60 +204,8 @@ class PriceSentry:
                             message, top_movers_sorted = result
                             logging.info(f"Detected price movements exceeding threshold, message content: {message}")
 
-                            # Build a composite chart image for top 6 movers and
-                            # send only the image via Telegram
-                            attach_chart = self.config.get("attachChart", False)
-                            image_bytes = None
-                            image_caption = ""  # no text per requirement
-                            chart_metadata = None
-                            if attach_chart and top_movers_sorted:
-                                try:
-                                    symbols_for_chart = [s for s, _, _ in top_movers_sorted[:6]]
-                                    chart_timeframe = self.config.get("chartTimeframe", "1m")
-                                    chart_lookback = int(self.config.get("chartLookbackMinutes", 60))
-                                    chart_theme = self.config.get("chartTheme", "dark")
-                                    chart_timezone = self.config.get("notificationTimezone", "Asia/Shanghai")
-
-                                    img_width = int(self.config.get("chartImageWidth", 1200))
-                                    img_height = int(self.config.get("chartImageHeight", 900))
-                                    img_scale = int(self.config.get("chartImageScale", 2))
-
-                                    image_bytes = generate_multi_candlestick_png(
-                                        self.exchange.exchange,
-                                        symbols_for_chart,
-                                        chart_timeframe,
-                                        chart_lookback,
-                                        chart_theme,
-                                        width=img_width,
-                                        height=img_height,
-                                        scale=img_scale,
-                                        timezone=chart_timezone,
-                                    )
-                                    chart_metadata = {
-                                        "symbols": symbols_for_chart,
-                                        "timeframe": chart_timeframe,
-                                        "lookbackMinutes": chart_lookback,
-                                        "theme": chart_theme,
-                                        "width": img_width,
-                                        "height": img_height,
-                                        "scale": img_scale,
-                                        "timezone": chart_timezone,
-                                    }
-                                except Exception as e:
-                                    logging.warning(
-                                        f"Failed to generate composite chart image: {e}. Skipping Telegram image."
-                                    )
-                                    image_bytes = None
-                                    chart_metadata = None
-
-                            send_kwargs = {
-                                "image_bytes": image_bytes,
-                                "image_caption": image_caption,
-                            }
-                            if chart_metadata is not None:
-                                send_kwargs["chart_metadata"] = chart_metadata
-
-                            if self.notifier.send(message, **send_kwargs):
+                            # Step 1: Send text notification immediately
+                            if self.notifier.send(message):
                                 # Record notifications for cooldown tracking
                                 cooldown_source = self.config.get("notificationCooldown", "5m")
                                 try:
@@ -316,6 +271,115 @@ class PriceSentry:
         except Exception:
             # Fallback to blocking put; queue is unbounded but guard just in case.
             self._config_events.put(event)
+
+    def _setup_detectors(self) -> None:
+        """Create and register anomaly detectors on the exchange."""
+        self._velocity_detector = PriceVelocityDetector(self.config)
+        self._volume_detector = VolumeSpikeDetector(self.config)
+
+        def _on_anomaly(event: AnomalyEvent) -> None:
+            try:
+                self._anomaly_events.put_nowait(event)
+            except Exception:
+                self._anomaly_events.put(event)
+
+        self._velocity_detector.on_event(_on_anomaly)
+        self._volume_detector.on_event(_on_anomaly)
+
+        self.exchange.register_detector(self._velocity_detector)
+        self.exchange.register_detector(self._volume_detector)
+
+        logging.info(
+            "Anomaly detectors registered (velocity=%s, volume=%s)",
+            self.config.get("priceVelocity", {}).get("enabled", True),
+            self.config.get("volumeSpike", {}).get("enabled", True),
+        )
+
+    async def _process_anomaly_events(self) -> None:
+        """Drain the anomaly event queue, combine per-symbol, and send notifications."""
+        events: list[AnomalyEvent] = []
+        while True:
+            try:
+                events.append(self._anomaly_events.get_nowait())
+            except Empty:
+                break
+
+        if not events:
+            return
+
+        # Group events by symbol, keeping best severity per event_type
+        severity_rank = {"HIGH": 3, "MEDIUM": 2, "LOW": 1}
+        by_symbol: dict[str, dict[str, AnomalyEvent]] = {}
+        for ev in events:
+            sym_events = by_symbol.setdefault(ev.symbol, {})
+            existing = sym_events.get(ev.event_type)
+            if existing is None or severity_rank.get(ev.severity, 0) > severity_rank.get(existing.severity, 0):
+                sym_events[ev.event_type] = ev
+
+        for symbol, sym_events in by_symbol.items():
+            message = self._format_combined_alert(symbol, sym_events)
+            if message:
+                self.notifier.send(message)
+
+    @staticmethod
+    def _format_combined_alert(symbol: str, events: dict[str, AnomalyEvent]) -> str:
+        """Format combined price + volume events into a single alert with trading hints."""
+        price_ev = events.get("price_velocity")
+        volume_ev = events.get("volume_spike")
+
+        if not price_ev and not volume_ev:
+            return ""
+
+        # Determine overall severity
+        severity_rank = {"HIGH": 3, "MEDIUM": 2, "LOW": 1}
+        max_sev = max(
+            (severity_rank.get(e.severity, 0) for e in events.values()),
+            default=0,
+        )
+        icon = "🚨" if max_sev >= 3 else "⚠️" if max_sev >= 2 else "ℹ️"
+
+        lines = [f"{icon} **`{symbol}`**\n"]
+
+        # Price info
+        if price_ev:
+            d = price_ev.data
+            change = d["change_pct"]
+            arrow = "🔼" if change > 0 else "🔽"
+            lines.append(
+                f"{arrow} **{abs(change):.2f}%** in {d['window_seconds']}s "
+                f"(*{d['price_from']:.4f}* → *{d['price_to']:.4f}*)"
+            )
+
+        # Volume info
+        if volume_ev:
+            d = volume_ev.data
+            lines.append(f"📊 Volume: **{d['ratio']:.1f}x** avg ({d['window_minutes']}m window)")
+
+        # Trading suggestion
+        lines.append("")
+        if price_ev and volume_ev:
+            change = price_ev.data["change_pct"]
+            ratio = volume_ev.data["ratio"]
+            if change > 0:
+                if ratio >= 5:
+                    lines.append("💡 Heavy volume breakout — strong long signal")
+                else:
+                    lines.append("💡 Volume-confirmed rally — watch for continuation")
+            else:
+                if ratio >= 5:
+                    lines.append("💡 Capitulation selling — watch for support levels")
+                else:
+                    lines.append("💡 Volume-confirmed drop — risk of further downside")
+        elif volume_ev:
+            lines.append("💡 Abnormal volume — watch for directional breakout")
+        elif price_ev:
+            change = price_ev.data["change_pct"]
+            if change > 0:
+                lines.append("💡 Low-volume pump — potential fakeout, wait for confirmation")
+            else:
+                lines.append("💡 Low-volume dip — possible shakeout, may bounce")
+
+        return "\n".join(lines)
 
     def _process_config_updates(self) -> None:
         while True:
@@ -401,6 +465,12 @@ class PriceSentry:
             self._rebuild_notification_filter_locked()
             if hasattr(self, "notifier") and self.notifier is not None:
                 self.notifier.update_config(self.config)
+
+            # Update detector configs
+            if hasattr(self, "_velocity_detector"):
+                self._velocity_detector.update_config(self.config)
+            if hasattr(self, "_volume_detector"):
+                self._volume_detector.update_config(self.config)
 
     def _reload_runtime_components(self, event: ConfigUpdateEvent) -> None:
         exchange_name = self.config.get("exchange", "binance")
@@ -528,8 +598,9 @@ class PriceSentry:
         self._auto_mode = is_auto
 
         if is_auto:
-            logging.info("Auto mode enabled, fetching top volume symbols")
-            monitored_symbols = fetch_top_volume_symbols(exchange_name, limit=20)
+            auto_limit = self.config.get("autoModeLimit", 50)
+            logging.info("Auto mode enabled, fetching top %s volume symbols", auto_limit)
+            monitored_symbols = fetch_top_volume_symbols(exchange_name, limit=auto_limit)
             self._last_auto_refresh = time.time()
 
             if not monitored_symbols:
@@ -544,7 +615,7 @@ class PriceSentry:
                 "Auto mode: loaded %s top volume symbols for %s: %s",
                 len(monitored_symbols),
                 exchange_name,
-                ", ".join(monitored_symbols[:5]) + (" ..." if len(monitored_symbols) > 5 else ""),
+                ", ".join(monitored_symbols[:8]) + (" ..." if len(monitored_symbols) > 8 else ""),
             )
             return
 
@@ -632,7 +703,7 @@ class PriceSentry:
         logging.info("Auto mode: refreshing top volume symbols (4-hour interval)")
 
         try:
-            new_symbols = fetch_top_volume_symbols(exchange_name, limit=20)
+            new_symbols = fetch_top_volume_symbols(exchange_name, limit=self.config.get("autoModeLimit", 50))
             if not new_symbols:
                 logging.warning("Auto refresh returned empty symbols, keeping current list")
                 return

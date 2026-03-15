@@ -28,7 +28,7 @@ exchange: "okx"
 defaultTimeframe: "5m"
 checkInterval: "1m"
 defaultThreshold: 1
-notificationSymbols: "auto"  # top 20 by volume, refreshes every 4h
+notificationSymbols: "auto"  # top 50 by volume, refreshes every 4h
 
 telegram:
   token: "your-bot-token"

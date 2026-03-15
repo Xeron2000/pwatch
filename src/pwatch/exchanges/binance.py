@@ -79,6 +79,11 @@ class BinanceExchange(BaseExchange):
 
                                 # Store historical data using base class method
                                 self._store_historical_price(canonical_symbol, price)
+                                self._notify_detectors_price(canonical_symbol, price)
+
+                                # Volume tracking (24h quote volume in USDT)
+                                if "q" in data:
+                                    self._notify_detectors_volume(canonical_symbol, float(data["q"]))
                         except Exception as e:
                             logging.error(f"Binance WebSocket data processing error: {e}")
                             break

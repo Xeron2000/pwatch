@@ -109,8 +109,8 @@ notificationChannels:
 # 💡 三种模式 / Three Modes:
 #
 # 【模式1】auto (推荐 / Recommended)
-#    自动获取成交量前 20 的交易对，每 4 小时刷新
-#    Auto-fetch top 20 pairs by volume, refreshes every 4 hours
+#    自动获取成交量前 N 的交易对（默认 50），每 4 小时刷新
+#    Auto-fetch top N pairs by volume (default 50), refreshes every 4 hours
 #    notificationSymbols: auto
 #
 # 【模式2】default
@@ -220,6 +220,47 @@ chartImageScale: 2             # 缩放比例 / Scale factor
 # 可选值 / Options: "DEBUG", "INFO", "WARNING", "ERROR"
 #
 # logLevel: "INFO"
+
+
+# Auto 模式监控币数量 / Auto mode symbol count
+# ──────────────────────────────────────────────
+# notificationSymbols 为 "auto" 时，获取成交量排名前 N 的交易对
+# When notificationSymbols is "auto", fetches top N pairs by volume
+#
+# autoModeLimit: 50        # 默认 50 / Default 50
+
+
+# ┌─────────────────────────────────────────────────────────────────────────────┐
+# │               实时异动检测 / Real-time Anomaly Detection                      │
+# └─────────────────────────────────────────────────────────────────────────────┘
+
+# 价格加速度检测 / Price Velocity Detection
+# ──────────────────────────────────────────
+# 在每个 WebSocket tick 上检测快速价格变动（不依赖 checkInterval）
+# Detects rapid price moves on every WebSocket tick (independent of checkInterval)
+#
+# priceVelocity:
+#   enabled: true
+#   windows:                  # 多时间窗口配置 / Multi-window config
+#     - seconds: 30           # 30 秒内变化超过 0.5% / 0.5% change in 30s
+#       threshold: 0.5
+#     - seconds: 60           # 60 秒内变化超过 0.8%
+#       threshold: 0.8
+#     - seconds: 120          # 120 秒内变化超过 1.2%
+#       threshold: 1.2
+#   cooldownSeconds: 60       # 同一币种+窗口的冷却时间 / Per-symbol+window cooldown
+
+# 成交量异动检测 / Volume Spike Detection
+# ────────────────────────────────────────
+# 检测成交量突然激增（量在价先信号）
+# Detects sudden volume surges (volume precedes price signal)
+#
+# volumeSpike:
+#   enabled: true
+#   multiplier: 3.0           # 当前分钟均量 / 历史均量 >= 3x 触发
+#                              # Triggers when recent avg / window avg >= 3x
+#   windowMinutes: 10          # 对比窗口长度 / Comparison window length
+#   minNotifyInterval: "2m"    # 同一币种通知间隔 / Per-symbol notify interval
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

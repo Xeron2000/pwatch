@@ -8,6 +8,7 @@ from collections import deque
 import ccxt
 from expiringdict import ExpiringDict
 
+from pwatch.detectors.base import BaseDetector
 from pwatch.utils.cache_manager import price_cache
 from pwatch.utils.error_handler import ErrorSeverity, error_handler
 from pwatch.utils.performance_monitor import performance_monitor
@@ -44,6 +45,9 @@ class BaseExchange(ABC):
             self.ws_thread = None
             self.running = False
 
+            # Anomaly detectors (registered externally)
+            self._detectors: list[BaseDetector] = []
+
             logging.info(f"BaseExchange initialized for {exchange_name}")
 
         except Exception as e:
@@ -61,6 +65,28 @@ class BaseExchange(ABC):
     def _get_ohlcv_params(self, symbol):
         """Parameters forwarded to fetch_ohlcv for historical data."""
         return {}
+
+    def register_detector(self, detector: BaseDetector) -> None:
+        """Register an anomaly detector to receive price/volume updates."""
+        self._detectors.append(detector)
+
+    def _notify_detectors_price(self, symbol: str, price: float) -> None:
+        """Notify all detectors of a price update (called from WS thread)."""
+        ts = time.time()
+        for d in self._detectors:
+            try:
+                d.on_price_update(symbol, price, ts)
+            except Exception as e:
+                logging.debug("Detector price error: %s", e)
+
+    def _notify_detectors_volume(self, symbol: str, cumulative_volume: float) -> None:
+        """Notify all detectors of a volume update (called from WS thread)."""
+        ts = time.time()
+        for d in self._detectors:
+            try:
+                d.on_volume_update(symbol, cumulative_volume, ts)
+            except Exception as e:
+                logging.debug("Detector volume error: %s", e)
 
     def _store_historical_price(self, symbol: str, price: float) -> None:
         """Store historical price with automatic cleanup.

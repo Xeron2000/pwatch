@@ -112,6 +112,12 @@ class OkxExchange(BaseExchange):
 
                                     # Store historical data using base class method
                                     self._store_historical_price(symbol, price)
+                                    self._notify_detectors_price(symbol, price)
+
+                                    # Volume tracking (24h volume in contracts)
+                                    vol = item.get("vol24h")
+                                    if vol:
+                                        self._notify_detectors_volume(symbol, float(vol))
                         except Exception as e:
                             logging.error(f"OKX WebSocket data processing error: {e}")
                             break

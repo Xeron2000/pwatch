@@ -1,48 +1,39 @@
-# PriceSentry
+# pwatch
 
-Cryptocurrency futures price monitoring with Telegram alerts.
+Cryptocurrency futures price monitor with Telegram alerts.
 
-## Quick Start
+## Install
 
 ```bash
-uvx --from git+https://github.com/Xeron2000/PriceSentry.git pricesentry
+uv tool install git+https://github.com/Xeron2000/pwatch
 ```
 
-First run will guide you through setup:
-1. Get Bot Token from [@BotFather](https://t.me/botfather)
-2. Get Chat ID from [@userinfobot](https://t.me/userinfobot)
-3. Select exchange (okx/bybit/binance)
-4. Press Enter for auto mode (monitors top 20 by volume)
+## Usage
 
-## Configuration
+```bash
+pwatch                                         # Start monitoring
+pwatch update-markets                          # Update market data
+pwatch update-markets --exchanges okx binance  # Update specific exchanges
+pwatch config-path                             # Show config directory
+```
 
-Edit `config/config.yaml`:
+First run guides you through setup — you'll need a [Telegram Bot Token](https://t.me/botfather).
+
+## Config
+
+Located at `~/.config/pwatch/config.yaml`:
 
 ```yaml
 exchange: "okx"
 defaultTimeframe: "5m"
 checkInterval: "1m"
 defaultThreshold: 1
-
-# Auto mode: monitors top 20 symbols by 24h volume (refreshes every 4h)
-notificationSymbols: "auto"
-
-# Or specify manually:
-# notificationSymbols:
-#   - "BTC/USDT:USDT"
-#   - "ETH/USDT:USDT"
+notificationSymbols: "auto"  # top 20 by volume, refreshes every 4h
 
 telegram:
   token: "your-bot-token"
   chatId: "your-chat-id"
 ```
-
-## Commands
-
-| Action | Command |
-|--------|---------|
-| Start | `pricesentry` |
-| Update markets | `uv run python tools/update_markets.py` |
 
 ## License
 

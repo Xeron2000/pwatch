@@ -3,10 +3,12 @@ from pathlib import Path
 
 import yaml
 
+from pwatch.paths import get_config_path, get_symbols_path
+
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 
-def load_config(configPath="config/config.yaml"):
+def load_config(configPath=None):
     """
     Loads the configuration from a YAML file.
 
@@ -29,7 +31,7 @@ def load_config(configPath="config/config.yaml"):
     Optional keys:
         - 'symbolsFilePath': Path to the symbols file. Defaults to "config/symbols.txt".
     """
-    path = Path(configPath)
+    path = Path(configPath) if configPath else get_config_path()
 
     try:
         with open(str(path), "r") as file:
@@ -54,7 +56,7 @@ def load_config(configPath="config/config.yaml"):
             config["notificationTimezone"] = "Asia/Shanghai"  # Default timezone
 
         if "symbolsFilePath" not in config or not config["symbolsFilePath"]:
-            config["symbolsFilePath"] = "config/symbols.txt"
+            config["symbolsFilePath"] = str(get_symbols_path())
 
         # Monitoring falls back to timeframe when no explicit interval is provided
         if "checkInterval" not in config or not config["checkInterval"]:

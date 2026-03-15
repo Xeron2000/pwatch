@@ -2,7 +2,7 @@
 
 from typing import Any, Dict, Optional
 
-from utils.send_notifications import send_notifications
+from pwatch.utils.send_notifications import send_notifications
 
 
 class Notifier:

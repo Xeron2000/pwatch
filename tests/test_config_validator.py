@@ -5,7 +5,7 @@ Test cases for configuration validation system.
 import os
 import tempfile
 
-from utils.config_validator import ValidationResult, config_validator
+from pwatch.utils.config_validator import ValidationResult, config_validator
 
 
 class TestConfigValidator:

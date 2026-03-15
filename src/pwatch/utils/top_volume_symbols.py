@@ -1,4 +1,4 @@
-"""Fetch top volume symbols from exchanges."""
+"""Fetch top volume symbols from pwatch.exchanges."""
 
 import logging
 import time

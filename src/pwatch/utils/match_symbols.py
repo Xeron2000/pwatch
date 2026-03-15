@@ -1,6 +1,8 @@
 import json
 import re
 
+from pwatch.paths import get_markets_path
+
 
 def match_symbols(symbols, exchange):
     """
@@ -20,7 +22,7 @@ def match_symbols(symbols, exchange):
     """
 
     try:
-        with open("config/supported_markets.json", "r") as f:
+        with open(get_markets_path(), "r") as f:
             supported_markets = json.load(f)
     except (FileNotFoundError, json.JSONDecodeError):
         return []

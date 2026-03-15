@@ -3,9 +3,9 @@ import logging
 import traceback
 from typing import Optional
 
-from core.sentry import PriceSentry
-from notifications.telegram_bot_service import TelegramBotService
-from utils.setup_logging import setup_logging
+from pwatch.core.sentry import PriceSentry
+from pwatch.notifications.telegram_bot_service import TelegramBotService
+from pwatch.utils.setup_logging import setup_logging
 
 
 async def main():

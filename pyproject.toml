@@ -1,9 +1,13 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [project]
-name = "PriceSentry"
+name = "pwatch"
 version = "1.0.0"
-description = "A lightweight cryptocurrency contract price monitoring tool built for traders and enthusiasts"
+description = "Lightweight cryptocurrency futures price monitor with Telegram alerts"
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.10"
 license = { file = "LICENSE" }
 authors = [
   { name = "Xeron", email = "xeron2333@gmail.com" },
@@ -17,53 +21,51 @@ dependencies = [
     "matplotlib>=3.7.0",
     "mplfinance>=0.12.9",
     "pandas>=1.5.0",
-    "pytest-cov>=5.0.0",
     "psutil>=7.0.0",
-    "pytest-asyncio>=0.24.0",
     "python-dotenv>=1.0.0",
-    "ruff>=0.12.8",
     "websocket-client>=1.8.0",
     "python-telegram-bot[rate-limiter]>=21.4",
 ]
 
 [project.urls]
-Homepage = "https://github.com/Xeron2000/PriceSentry"
-Issues = "https://github.com/Xeron2000/PriceSentry/issues"
+Homepage = "https://github.com/Xeron2000/pwatch"
+Issues = "https://github.com/Xeron2000/pwatch/issues"
 
 [project.scripts]
-pricesentry = "app.cli:main"
+pwatch = "pwatch.app.cli:main"
 
 [project.optional-dependencies]
 dev = [
-    "ruff",
+    "ruff>=0.6.0",
     "pytest>=7.4.0",
     "pytest-cov>=4.1.0",
     "pytest-mock>=3.11.1",
     "pytest-asyncio>=0.21.1",
-    "pip-audit>=2.6.0",
     "bandit>=1.7.5",
-    "safety>=3.0.0"
+    "safety>=3.0.0",
+    "pip-audit>=2.7.3",
+    "mypy>=1.14.1",
 ]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pwatch"]
 
 [tool.ruff]
 line-length = 120
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I"]
-ignore = ["E501"]  # Ignore line too long errors
-
-[tool.setuptools]
-package-dir = {"" = "src"}
-
-[tool.setuptools.packages.find]
-where = ["src"]
+ignore = ["E501"]
 
 [dependency-groups]
 dev = [
     "ruff>=0.6.0",
+    "pytest>=7.4.0",
+    "pytest-cov>=4.1.0",
+    "pytest-mock>=3.11.1",
+    "pytest-asyncio>=0.21.1",
     "bandit>=1.7.5",
     "safety>=3.0.0",
     "pip-audit>=2.7.3",
-    "typer<0.13.0",
     "mypy>=1.14.1",
 ]

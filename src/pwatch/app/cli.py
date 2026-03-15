@@ -1,17 +1,10 @@
-"""Main CLI entry point for PriceSentry."""
+"""Main CLI entry point for pwatch."""
 
 import asyncio
 import logging
 import sys
-from pathlib import Path
 
-ROOT_DIR = Path(__file__).resolve().parent.parent.parent
-SRC_DIR = ROOT_DIR / "src"
-
-for candidate in (SRC_DIR, ROOT_DIR):
-    candidate_str = str(candidate)
-    if candidate_str not in sys.path:
-        sys.path.insert(0, candidate_str)
+from pwatch.paths import get_config_dir, get_config_path, get_markets_path
 
 
 def get_user_input(prompt, default=None, secret=False):
@@ -47,7 +40,7 @@ def print_help(text: str):
 
 def validate_exchange(value: str, language: str) -> tuple[bool, str]:
     """Validate exchange input."""
-    from utils.default_symbols import VALID_EXCHANGES, get_prompt
+    from pwatch.utils.default_symbols import VALID_EXCHANGES, get_prompt
 
     value = value.lower().strip()
     if value in VALID_EXCHANGES:
@@ -57,7 +50,7 @@ def validate_exchange(value: str, language: str) -> tuple[bool, str]:
 
 def validate_timeframe(value: str, language: str) -> tuple[bool, str]:
     """Validate timeframe input."""
-    from utils.default_symbols import VALID_TIMEFRAMES, get_prompt
+    from pwatch.utils.default_symbols import VALID_TIMEFRAMES, get_prompt
 
     value = value.lower().strip()
     if value in VALID_TIMEFRAMES:
@@ -67,7 +60,7 @@ def validate_timeframe(value: str, language: str) -> tuple[bool, str]:
 
 def validate_positive_number(value: str, language: str) -> tuple[bool, float | str]:
     """Validate positive number input."""
-    from utils.default_symbols import get_prompt
+    from pwatch.utils.default_symbols import get_prompt
 
     try:
         num = float(value)
@@ -92,7 +85,7 @@ def get_validated_input(prompt: str, default: str, validator, language: str, sec
 
 def ask_yes_no(prompt: str, language: str, default: bool = False) -> bool:
     """Ask a yes/no question."""
-    from utils.default_symbols import get_prompt
+    from pwatch.utils.default_symbols import get_prompt
 
     hint = get_prompt(language, "yes_no_hint")
     default_str = "y" if default else "n"
@@ -102,7 +95,7 @@ def ask_yes_no(prompt: str, language: str, default: bool = False) -> bool:
 
 def interactive_config():
     """Interactive configuration setup with language selection and default symbols."""
-    from utils.default_symbols import get_prompt
+    from pwatch.utils.default_symbols import get_prompt
 
     # Language selection
     print("\n" + "=" * 60)
@@ -265,35 +258,33 @@ def interactive_config():
 
 
 def ensure_config_exists():
-    """Ensure configuration file exists, create from template if not."""
-    CONFIG_FILE = Path("config/config.yaml")
+    """Ensure configuration file exists, create interactively if not."""
+    config_file = get_config_path()
 
-    if CONFIG_FILE.exists():
-        logging.info(f"Configuration file exists: {CONFIG_FILE}")
-        return CONFIG_FILE.absolute()
+    if config_file.exists():
+        logging.info(f"Configuration file exists: {config_file}")
+        return config_file
 
     print("\n⚠️  未找到配置文件，开始交互式配置...\n")
     config = interactive_config()
 
-    CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
-
     import yaml
 
-    with CONFIG_FILE.open("w", encoding="utf-8") as f:
+    with config_file.open("w", encoding="utf-8") as f:
         yaml.safe_dump(config, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
 
-    print(f"✅ 配置文件已保存: {CONFIG_FILE.absolute()}")
-    print(f"📝 如需修改，请编辑: {CONFIG_FILE.absolute()}\n")
+    print(f"✅ 配置文件已保存: {config_file}")
+    print(f"📝 如需修改，请编辑: {config_file}\n")
 
-    return CONFIG_FILE.absolute()
+    return config_file
 
 
 def show_data_info():
     """Show data directory information."""
-    data_dir = Path("config").absolute()
-    print(f"📁 数据目录: {data_dir}")
-    print(f"   - 配置文件: {data_dir / 'config.yaml'}")
-    print(f"   - 市场数据: {data_dir / 'supported_markets.json'}")
+    config_dir = get_config_dir()
+    print(f"📁 配置目录: {config_dir}")
+    print(f"   - 配置文件: {get_config_path()}")
+    print(f"   - 市场数据: {get_markets_path()}")
     print()
 
 
@@ -303,7 +294,7 @@ def update_markets(config):
 
     logging.info(f"Updating supported markets for {exchange}...")
 
-    from utils.supported_markets import refresh_supported_markets
+    from pwatch.utils.supported_markets import refresh_supported_markets
 
     try:
         refreshed = refresh_supported_markets([exchange])
@@ -315,9 +306,6 @@ def update_markets(config):
             return False
     except Exception as e:
         logging.warning(f"Failed to update markets: {e}")
-        logging.warning(
-            f"You can try updating markets manually with: uv run python tools/update_markets.py --exchanges {exchange}"
-        )
         return False
 
 
@@ -325,30 +313,20 @@ def ensure_market_data(config):
     """Ensure market data is available before starting."""
     exchange = config.get("exchange", "binance")
 
-    from pathlib import Path
+    markets_file = get_markets_path()
 
-    supported_markets_file = Path("config/supported_markets.json")
-
-    if not supported_markets_file.exists():
+    if not markets_file.exists():
         logging.info("Market data file not found, updating now...")
-        success = update_markets(config)
-        if not success:
-            logging.warning(f"Failed to update markets for {exchange}. Please run update_markets.py manually:")
-            logging.info(f"  uv run python tools/update_markets.py --exchanges {exchange}")
-            return False
-    else:
-        import json
+        return update_markets(config)
 
-        with supported_markets_file.open("r") as f:
-            markets_data = json.load(f)
+    import json
 
-        if exchange not in markets_data or not markets_data[exchange]:
-            logging.info(f"No market data for {exchange}, updating now...")
-            success = update_markets(config)
-            if not success:
-                logging.warning(f"Failed to update markets for {exchange}. Please run update_markets.py manually:")
-                logging.info(f"  uv run python tools/update_markets.py --exchanges {exchange}")
-                return False
+    with markets_file.open("r") as f:
+        markets_data = json.load(f)
+
+    if exchange not in markets_data or not markets_data[exchange]:
+        logging.info(f"No market data for {exchange}, updating now...")
+        return update_markets(config)
 
     logging.info(f"Market data verified for {exchange}")
     return True
@@ -356,9 +334,9 @@ def ensure_market_data(config):
 
 async def run_monitoring():
     """Run price monitoring service."""
-    from core.sentry import PriceSentry
-    from notifications.telegram_bot_service import TelegramBotService
-    from utils.setup_logging import setup_logging
+    from pwatch.core.sentry import PriceSentry
+    from pwatch.notifications.telegram_bot_service import TelegramBotService
+    from pwatch.utils.setup_logging import setup_logging
 
     bot_service = None
     try:
@@ -391,7 +369,7 @@ def load_config(config_path):
     import yaml
 
     if not config_path.exists():
-        raise FileNotFoundError(f"Configuration file not found: {config_path}\nPlease create config file manually.")
+        raise FileNotFoundError(f"Configuration file not found: {config_path}")
 
     with config_path.open("r", encoding="utf-8") as f:
         return yaml.safe_load(f) or {}
@@ -399,11 +377,11 @@ def load_config(config_path):
 
 def main():
     """Main entry point."""
-    from utils.setup_logging import setup_logging
+    from pwatch.utils.setup_logging import setup_logging
 
     setup_logging()
 
-    print("\n🚀 PriceSentry 启动中...\n")
+    print("\n🚀 pwatch 启动中...\n")
 
     try:
         config_path = ensure_config_exists()
@@ -411,20 +389,15 @@ def main():
 
         config = load_config(config_path)
 
-        # Ensure market data is available before starting
         print("📊 正在验证市场数据...")
         if not ensure_market_data(config):
             logging.error("❌ 无法获取市场数据，请检查网络或使用代理")
-            logging.info("💡 提示:")
-            logging.info("   1. 手动运行: uv run python tools/update_markets.py --exchanges <exchange>")
-            logging.info("   2. 检查网络连接")
-            logging.info("   3. Binance 可能需要代理")
             sys.exit(1)
 
         asyncio.run(run_monitoring())
 
     except KeyboardInterrupt:
-        logging.info("\n\n👋 PriceSentry 已停止")
+        logging.info("\n\n👋 pwatch 已停止")
     except Exception as e:
         logging.error(f"❌ 启动失败: {e}")
         sys.exit(1)

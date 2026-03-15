@@ -1,7 +1,7 @@
 import logging
 from typing import List
 
-from notifications.telegram import send_telegram_message, send_telegram_photo
+from pwatch.notifications.telegram import send_telegram_message, send_telegram_photo
 
 
 def _resolve_telegram_targets(telegram_config: dict) -> List[str]:

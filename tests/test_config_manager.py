@@ -5,7 +5,7 @@ from pathlib import Path
 
 import yaml
 
-from core.config_manager import ConfigManager
+from pwatch.core.config_manager import ConfigManager
 
 
 def _create_manager(tmp_path, base_config):
@@ -18,7 +18,7 @@ def _create_manager(tmp_path, base_config):
 def test_update_config_rejects_empty_notification_symbols(tmp_path, sample_config, monkeypatch):
     """Empty notification symbol lists must fail validation."""
     monkeypatch.setattr(
-        "core.config_manager.load_usdt_contracts",
+        "pwatch.core.config_manager.load_usdt_contracts",
         lambda exchange: ["BTC/USDT:USDT"],
     )
     manager = _create_manager(tmp_path, sample_config)
@@ -40,7 +40,7 @@ def test_update_config_rejects_non_matching_symbols(tmp_path, sample_config, mon
     candidate["notificationSymbols"] = ["DOGE/USDT:USDT"]
 
     monkeypatch.setattr(
-        "core.config_manager.load_usdt_contracts",
+        "pwatch.core.config_manager.load_usdt_contracts",
         lambda exchange: ["BTC/USDT:USDT"],
     )
 

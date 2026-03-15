@@ -7,7 +7,10 @@ from unittest.mock import mock_open, patch
 import pytest
 import yaml
 
-from utils.load_config import load_config
+from pwatch.paths import get_config_path, get_symbols_path
+from pwatch.utils.load_config import load_config
+
+EXPECTED_SYMBOLS_PATH = str(get_symbols_path())
 
 
 class TestLoadConfig:
@@ -24,13 +27,13 @@ class TestLoadConfig:
         }
 
         with patch("builtins.open", mock_open(read_data=yaml.dump(config_data))), patch(
-            "utils.load_config.logging"
+            "pwatch.utils.load_config.logging"
         ) as mock_logging:
             result = load_config("test_config.yaml")
 
             expected = {
                 **config_data,
-                "symbolsFilePath": "config/symbols.txt",
+                "symbolsFilePath": EXPECTED_SYMBOLS_PATH,
                 "checkInterval": config_data["defaultTimeframe"],
             }
 
@@ -46,7 +49,7 @@ class TestLoadConfig:
         }
 
         with patch("builtins.open", mock_open(read_data=yaml.dump(config_data))), patch(
-            "utils.load_config.logging"
+            "pwatch.utils.load_config.logging"
         ):
             with pytest.raises(
                 ValueError, match="Missing required config key: defaultTimeframe"
@@ -64,7 +67,7 @@ class TestLoadConfig:
         }
 
         with patch("builtins.open", mock_open(read_data=yaml.dump(config_data))), patch(
-            "utils.load_config.logging"
+            "pwatch.utils.load_config.logging"
         ):
             result = load_config("test_config.yaml")
 
@@ -75,7 +78,7 @@ class TestLoadConfig:
         """Test configuration loading when file is not found."""
         with patch(
             "builtins.open", side_effect=FileNotFoundError("File not found")
-        ), patch("utils.load_config.logging") as mock_logging:
+        ), patch("pwatch.utils.load_config.logging") as mock_logging:
             with pytest.raises(Exception):
                 load_config("nonexistent_config.yaml")
 
@@ -86,7 +89,7 @@ class TestLoadConfig:
         invalid_yaml = "invalid: yaml: content: [unclosed"
 
         with patch("builtins.open", mock_open(read_data=invalid_yaml)), patch(
-            "utils.load_config.logging"
+            "pwatch.utils.load_config.logging"
         ) as mock_logging:
             with pytest.raises(Exception):
                 load_config("invalid_config.yaml")
@@ -96,7 +99,7 @@ class TestLoadConfig:
     def test_load_config_empty_file(self):
         """Test configuration loading with empty file."""
         with patch("builtins.open", mock_open(read_data="")), patch(
-            "utils.load_config.logging"
+            "pwatch.utils.load_config.logging"
         ):
             with pytest.raises(
                 ValueError, match="Missing required config key: exchange"
@@ -116,13 +119,13 @@ class TestLoadConfig:
         }
 
         with patch("builtins.open", mock_open(read_data=yaml.dump(config_data))), patch(
-            "utils.load_config.logging"
+            "pwatch.utils.load_config.logging"
         ):
             result = load_config("test_config.yaml")
 
             expected = {
                 **config_data,
-                "symbolsFilePath": "config/symbols.txt",
+                "symbolsFilePath": EXPECTED_SYMBOLS_PATH,
                 "checkInterval": config_data["defaultTimeframe"],
             }
             assert result == expected
@@ -144,13 +147,13 @@ class TestLoadConfig:
         }
 
         with patch("builtins.open", mock_open(read_data=yaml.dump(config_data))), patch(
-            "utils.load_config.logging"
+            "pwatch.utils.load_config.logging"
         ):
             result = load_config("test_config.yaml")
 
             expected = {
                 **config_data,
-                "symbolsFilePath": "config/symbols.txt",
+                "symbolsFilePath": EXPECTED_SYMBOLS_PATH,
                 "checkInterval": config_data["defaultTimeframe"],
             }
             assert result == expected
@@ -171,18 +174,17 @@ class TestLoadConfig:
         }
 
         mock_file = mock_open(read_data=yaml.dump(config_data))
-        with patch("builtins.open", mock_file), patch("utils.load_config.logging"):
+        with patch("builtins.open", mock_file), patch("pwatch.utils.load_config.logging"):
             result = load_config()  # No path specified
 
             expected = {
                 **config_data,
-                "symbolsFilePath": "config/symbols.txt",
+                "symbolsFilePath": EXPECTED_SYMBOLS_PATH,
                 "checkInterval": config_data["defaultTimeframe"],
             }
 
             assert result == expected
-            # Verify default path was used
-            mock_file.assert_called_once_with("config/config.yaml", "r")
+            mock_file.assert_called_once_with(str(get_config_path()), "r")
 
     def test_load_config_custom_check_interval(self):
         """Test configuration loading when a custom check interval is provided."""
@@ -196,12 +198,12 @@ class TestLoadConfig:
         }
 
         with patch("builtins.open", mock_open(read_data=yaml.dump(config_data))), patch(
-            "utils.load_config.logging"
+            "pwatch.utils.load_config.logging"
         ):
             result = load_config("test_config.yaml")
 
             assert result["checkInterval"] == "1m"
-            assert result["symbolsFilePath"] == "config/symbols.txt"
+            assert result["symbolsFilePath"] == EXPECTED_SYMBOLS_PATH
 
     def test_load_config_timezone_none(self):
         """Test configuration loading with timezone as None."""
@@ -214,12 +216,12 @@ class TestLoadConfig:
         }
 
         with patch("builtins.open", mock_open(read_data=yaml.dump(config_data))), patch(
-            "utils.load_config.logging"
+            "pwatch.utils.load_config.logging"
         ):
             result = load_config("test_config.yaml")
 
             assert result["notificationTimezone"] == "Asia/Shanghai"
-            assert result["symbolsFilePath"] == "config/symbols.txt"
+            assert result["symbolsFilePath"] == EXPECTED_SYMBOLS_PATH
             assert result["checkInterval"] == config_data["defaultTimeframe"]
 
     def test_load_config_special_characters(self):
@@ -235,13 +237,13 @@ class TestLoadConfig:
         }
 
         with patch("builtins.open", mock_open(read_data=yaml.dump(config_data))), patch(
-            "utils.load_config.logging"
+            "pwatch.utils.load_config.logging"
         ):
             result = load_config("test_config.yaml")
 
             expected = {
                 **config_data,
-                "symbolsFilePath": "config/symbols.txt",
+                "symbolsFilePath": EXPECTED_SYMBOLS_PATH,
                 "checkInterval": config_data["defaultTimeframe"],
             }
 
@@ -260,11 +262,11 @@ class TestLoadConfig:
         }
 
         with patch("builtins.open", mock_open(read_data=yaml.dump(config_data))), patch(
-            "utils.load_config.logging"
+            "pwatch.utils.load_config.logging"
         ):
             result = load_config("test_config.yaml")
 
-            assert result["symbolsFilePath"] == "config/symbols.txt"
+            assert result["symbolsFilePath"] == EXPECTED_SYMBOLS_PATH
             assert result["defaultThreshold"] == "2.5"  # Should preserve as string
             assert result["checkInterval"] == config_data["defaultTimeframe"]
 
@@ -279,10 +281,10 @@ class TestLoadConfig:
         }
 
         with patch("builtins.open", mock_open(read_data=yaml.dump(config_data))), patch(
-            "utils.load_config.logging"
+            "pwatch.utils.load_config.logging"
         ):
             result = load_config("test_config.yaml")
 
-            assert result["symbolsFilePath"] == "config/symbols.txt"
+            assert result["symbolsFilePath"] == EXPECTED_SYMBOLS_PATH
             assert result["defaultThreshold"] is True  # Should preserve as boolean
             assert result["checkInterval"] == config_data["defaultTimeframe"]

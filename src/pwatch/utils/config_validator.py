@@ -11,7 +11,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
 
-from utils.parse_timeframe import parse_timeframe
+from pwatch.utils.parse_timeframe import parse_timeframe
 
 
 class ValidationLevel(Enum):

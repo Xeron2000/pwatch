@@ -1,4 +1,4 @@
-"""Runtime configuration management for PriceSentry."""
+"""Runtime configuration management for pwatch."""
 
 from __future__ import annotations
 
@@ -12,11 +12,12 @@ from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
 import yaml
 
-from utils.config_io import write_config
-from utils.config_validator import ValidationRule, config_validator
-from utils.supported_markets import load_usdt_contracts
+from pwatch.paths import get_config_path
+from pwatch.utils.config_io import write_config
+from pwatch.utils.config_validator import ValidationRule, config_validator
+from pwatch.utils.supported_markets import load_usdt_contracts
 
-CONFIG_PATH = Path("config/config.yaml")
+CONFIG_PATH = get_config_path()
 
 Listener = Callable[["ConfigUpdateEvent"], None]
 
@@ -193,7 +194,10 @@ class ConfigManager:
             config = self._get_default_config()
         validation = config_validator.validate_config(config)
         if not validation.is_valid:
-            raise ValueError("Initial configuration failed validation: " + "; ".join(validation.errors))
+            # Log warnings but don't crash on initial load — the user may
+            # not have completed interactive setup yet.
+            for err in validation.errors:
+                logging.warning("Config validation: %s", err)
         self._config = copy.deepcopy(config)
         self._last_loaded_at = time.time()
 
@@ -251,7 +255,7 @@ class ConfigManager:
 
         if isinstance(notification_symbols, str) and notification_symbols.strip().lower() == "default":
             # Load default top 50 symbols
-            from utils.default_symbols import get_default_symbols
+            from pwatch.utils.default_symbols import get_default_symbols
 
             exchange = normalized.get("exchange", "okx")
             normalized["notificationSymbols"] = get_default_symbols(exchange)

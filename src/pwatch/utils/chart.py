@@ -12,7 +12,7 @@ import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 
-from utils.parse_timeframe import parse_timeframe
+from pwatch.utils.parse_timeframe import parse_timeframe
 
 
 def _compute_sma(values: List[float], window: int) -> List[Optional[float]]:

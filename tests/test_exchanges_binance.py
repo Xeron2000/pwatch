@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
-from exchanges.binance import BinanceExchange
+from pwatch.exchanges.binance import BinanceExchange
 
 
 class TestBinanceExchange:
@@ -14,9 +14,9 @@ class TestBinanceExchange:
 
     def test_init(self):
         """Test initialization of BinanceExchange."""
-        with patch("exchanges.base.ccxt.exchanges", ["binance"]), patch(
-            "exchanges.base.ccxt.binance"
-        ) as mock_binance, patch("exchanges.base.logging"):
+        with patch("pwatch.exchanges.base.ccxt.exchanges", ["binance"]), patch(
+            "pwatch.exchanges.base.ccxt.binance"
+        ) as mock_binance, patch("pwatch.exchanges.base.logging"):
             mock_exchange = Mock()
             mock_exchange.options = {}
             mock_binance.return_value = mock_exchange
@@ -32,10 +32,10 @@ class TestBinanceExchange:
     @pytest.mark.asyncio
     async def test_ws_connect_basic(self):
         """Test basic WebSocket connection setup."""
-        with patch("exchanges.base.ccxt.exchanges", ["binance"]), patch(
-            "exchanges.base.ccxt.binance"
-        ), patch("exchanges.base.logging"), patch(
-            "exchanges.binance.websockets.connect"
+        with patch("pwatch.exchanges.base.ccxt.exchanges", ["binance"]), patch(
+            "pwatch.exchanges.base.ccxt.binance"
+        ), patch("pwatch.exchanges.base.logging"), patch(
+            "pwatch.exchanges.binance.websockets.connect"
         ) as mock_connect:
             # Mock WebSocket
             mock_websocket = AsyncMock()
@@ -63,11 +63,11 @@ class TestBinanceExchange:
     @pytest.mark.asyncio
     async def test_ws_connect_retry_logic(self):
         """Test WebSocket connection retry logic."""
-        with patch("exchanges.base.ccxt.exchanges", ["binance"]), patch(
-            "exchanges.base.ccxt.binance"
-        ), patch("exchanges.binance.websockets.connect") as mock_connect, patch(
-            "exchanges.binance.asyncio.sleep"
-        ) as mock_sleep, patch("exchanges.base.logging"):
+        with patch("pwatch.exchanges.base.ccxt.exchanges", ["binance"]), patch(
+            "pwatch.exchanges.base.ccxt.binance"
+        ), patch("pwatch.exchanges.binance.websockets.connect") as mock_connect, patch(
+            "pwatch.exchanges.binance.asyncio.sleep"
+        ) as mock_sleep, patch("pwatch.exchanges.base.logging"):
             # Mock connection to fail once, then succeed
             mock_websocket = AsyncMock()
             mock_connect.side_effect = [Exception("Connection failed"), mock_websocket]
@@ -83,11 +83,11 @@ class TestBinanceExchange:
     @pytest.mark.asyncio
     async def test_ws_connect_max_retries(self):
         """Test WebSocket connection max retries."""
-        with patch("exchanges.base.ccxt.exchanges", ["binance"]), patch(
-            "exchanges.base.ccxt.binance"
-        ), patch("exchanges.binance.websockets.connect") as mock_connect, patch(
-            "exchanges.binance.asyncio.sleep"
-        ), patch("exchanges.base.logging"):
+        with patch("pwatch.exchanges.base.ccxt.exchanges", ["binance"]), patch(
+            "pwatch.exchanges.base.ccxt.binance"
+        ), patch("pwatch.exchanges.binance.websockets.connect") as mock_connect, patch(
+            "pwatch.exchanges.binance.asyncio.sleep"
+        ), patch("pwatch.exchanges.base.logging"):
             # Mock all connections to fail
             mock_connect.side_effect = Exception("Connection failed")
 
@@ -101,10 +101,10 @@ class TestBinanceExchange:
     @pytest.mark.asyncio
     async def test_ws_connect_ping_pong(self):
         """Test WebSocket ping/pong handling."""
-        with patch("exchanges.base.ccxt.exchanges", ["binance"]), patch(
-            "exchanges.base.ccxt.binance"
-        ), patch("exchanges.base.logging"), patch(
-            "exchanges.binance.websockets.connect"
+        with patch("pwatch.exchanges.base.ccxt.exchanges", ["binance"]), patch(
+            "pwatch.exchanges.base.ccxt.binance"
+        ), patch("pwatch.exchanges.base.logging"), patch(
+            "pwatch.exchanges.binance.websockets.connect"
         ) as mock_connect:
             # Mock WebSocket
             mock_websocket = AsyncMock()
@@ -118,9 +118,9 @@ class TestBinanceExchange:
 
     def test_ws_connect_uri_construction(self):
         """Test WebSocket URI construction."""
-        with patch("exchanges.base.ccxt.exchanges", ["binance"]), patch(
-            "exchanges.base.ccxt.binance"
-        ), patch("exchanges.base.logging"):
+        with patch("pwatch.exchanges.base.ccxt.exchanges", ["binance"]), patch(
+            "pwatch.exchanges.base.ccxt.binance"
+        ), patch("pwatch.exchanges.base.logging"):
             BinanceExchange()
 
             # Test symbol to stream conversion
@@ -135,10 +135,10 @@ class TestBinanceExchange:
     @pytest.mark.asyncio
     async def test_ws_connect_symbol_mapping(self):
         """Test WebSocket symbol mapping."""
-        with patch("exchanges.base.ccxt.exchanges", ["binance"]), patch(
-            "exchanges.base.ccxt.binance"
-        ), patch("exchanges.base.logging"), patch(
-            "exchanges.binance.websockets.connect"
+        with patch("pwatch.exchanges.base.ccxt.exchanges", ["binance"]), patch(
+            "pwatch.exchanges.base.ccxt.binance"
+        ), patch("pwatch.exchanges.base.logging"), patch(
+            "pwatch.exchanges.binance.websockets.connect"
         ) as mock_connect:
             # Mock WebSocket
             mock_websocket = AsyncMock()
@@ -154,10 +154,10 @@ class TestBinanceExchange:
     @pytest.mark.asyncio
     async def test_ws_connect_historical_data_cleanup(self):
         """Test WebSocket historical data cleanup."""
-        with patch("exchanges.base.ccxt.exchanges", ["binance"]), patch(
-            "exchanges.base.ccxt.binance"
-        ), patch("exchanges.base.logging"), patch(
-            "exchanges.binance.websockets.connect"
+        with patch("pwatch.exchanges.base.ccxt.exchanges", ["binance"]), patch(
+            "pwatch.exchanges.base.ccxt.binance"
+        ), patch("pwatch.exchanges.base.logging"), patch(
+            "pwatch.exchanges.binance.websockets.connect"
         ) as mock_connect:
             # Mock WebSocket
             mock_websocket = AsyncMock()
@@ -175,10 +175,10 @@ class TestBinanceExchange:
     @pytest.mark.asyncio
     async def test_ws_connect_error_handling(self):
         """Test WebSocket connection error handling."""
-        with patch("exchanges.base.ccxt.exchanges", ["binance"]), patch(
-            "exchanges.base.ccxt.binance"
-        ), patch("exchanges.binance.websockets.connect") as mock_connect, patch(
-            "exchanges.base.logging"
+        with patch("pwatch.exchanges.base.ccxt.exchanges", ["binance"]), patch(
+            "pwatch.exchanges.base.ccxt.binance"
+        ), patch("pwatch.exchanges.binance.websockets.connect") as mock_connect, patch(
+            "pwatch.exchanges.base.logging"
         ) as mock_logging:
             # Mock connection to fail
             mock_connect.side_effect = Exception("Connection failed")
@@ -194,10 +194,10 @@ class TestBinanceExchange:
     @pytest.mark.asyncio
     async def test_ws_connect_stops_when_running_false(self):
         """Test WebSocket connection stops when running is False."""
-        with patch("exchanges.base.ccxt.exchanges", ["binance"]), patch(
-            "exchanges.base.ccxt.binance"
-        ), patch("exchanges.binance.websockets.connect") as mock_connect, patch(
-            "exchanges.base.logging"
+        with patch("pwatch.exchanges.base.ccxt.exchanges", ["binance"]), patch(
+            "pwatch.exchanges.base.ccxt.binance"
+        ), patch("pwatch.exchanges.binance.websockets.connect") as mock_connect, patch(
+            "pwatch.exchanges.base.logging"
         ):
             # Mock WebSocket
             mock_websocket = AsyncMock()
@@ -212,13 +212,13 @@ class TestBinanceExchange:
 
     def test_inheritance(self):
         """Test that BinanceExchange properly inherits from BaseExchange."""
-        with patch("exchanges.base.ccxt.exchanges", ["binance"]), patch(
-            "exchanges.base.ccxt.binance"
-        ), patch("exchanges.base.logging"):
+        with patch("pwatch.exchanges.base.ccxt.exchanges", ["binance"]), patch(
+            "pwatch.exchanges.base.ccxt.binance"
+        ), patch("pwatch.exchanges.base.logging"):
             exchange = BinanceExchange()
 
             # Verify inheritance
-            from exchanges.base import BaseExchange
+            from pwatch.exchanges.base import BaseExchange
 
             assert isinstance(exchange, BaseExchange)
             assert exchange.exchange_name == "binance"

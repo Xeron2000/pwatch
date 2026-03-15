@@ -8,9 +8,9 @@ from collections import deque
 import ccxt
 from expiringdict import ExpiringDict
 
-from utils.cache_manager import price_cache
-from utils.error_handler import ErrorSeverity, error_handler
-from utils.performance_monitor import performance_monitor
+from pwatch.utils.cache_manager import price_cache
+from pwatch.utils.error_handler import ErrorSeverity, error_handler
+from pwatch.utils.performance_monitor import performance_monitor
 
 # Historical price storage configuration
 HISTORICAL_PRICE_MAX_AGE_MS = 60 * 60 * 1000  # 1 hour in milliseconds

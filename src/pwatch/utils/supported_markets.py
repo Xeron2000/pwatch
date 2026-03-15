@@ -12,9 +12,11 @@ from typing import Dict, Iterable, List, Sequence
 
 import ccxt
 
+from pwatch.paths import get_markets_path
+
 DERIVATIVE_TYPES = {"swap", "future", "futures", "perpetual", "option"}
 
-SUPPORTED_MARKETS_PATH = Path("config/supported_markets.json")
+SUPPORTED_MARKETS_PATH = get_markets_path()
 
 _QUOTE_PATTERN = re.compile(r"[:/]")
 

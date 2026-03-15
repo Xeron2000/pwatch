@@ -2,7 +2,7 @@
 
 from unittest.mock import patch
 
-from core.notifier import Notifier
+from pwatch.core.notifier import Notifier
 
 
 class TestNotifier:
@@ -21,7 +21,7 @@ class TestNotifier:
         assert notifier.telegram_config == {}
 
     def test_send_with_message_only(self, sample_config):
-        with patch("core.notifier.send_notifications") as mock_send_notifications:
+        with patch("pwatch.core.notifier.send_notifications") as mock_send_notifications:
             notifier = Notifier(sample_config)
             notifier.send("Test message")
 
@@ -34,7 +34,7 @@ class TestNotifier:
             )
 
     def test_send_with_image(self, sample_config):
-        with patch("core.notifier.send_notifications") as mock_send_notifications:
+        with patch("pwatch.core.notifier.send_notifications") as mock_send_notifications:
             notifier = Notifier(sample_config)
             image_bytes = b"fake_image_data"
             image_caption = "Test caption"
@@ -54,7 +54,7 @@ class TestNotifier:
             )
 
     def test_send_ignores_empty_messages(self, sample_config):
-        with patch("core.notifier.send_notifications") as mock_send_notifications:
+        with patch("pwatch.core.notifier.send_notifications") as mock_send_notifications:
             notifier = Notifier(sample_config)
 
             notifier.send("")
@@ -65,7 +65,7 @@ class TestNotifier:
 
     def test_send_handles_exception(self, sample_config):
         with patch(
-            "core.notifier.send_notifications", side_effect=Exception("Network error")
+            "pwatch.core.notifier.send_notifications", side_effect=Exception("Network error")
         ):
             notifier = Notifier(sample_config)
 
@@ -75,7 +75,7 @@ class TestNotifier:
 
     def test_send_returns_true_on_success(self, sample_config):
         """Verify send returns True when notification is sent successfully."""
-        with patch("core.notifier.send_notifications", return_value=True):
+        with patch("pwatch.core.notifier.send_notifications", return_value=True):
             notifier = Notifier(sample_config)
             result = notifier.send("Test message")
             assert result is True
@@ -89,7 +89,7 @@ class TestNotifier:
 
     def test_send_returns_false_on_all_channels_fail(self, sample_config):
         """Verify send returns False when all channels fail."""
-        with patch("core.notifier.send_notifications", return_value=False):
+        with patch("pwatch.core.notifier.send_notifications", return_value=False):
             notifier = Notifier(sample_config)
             result = notifier.send("Test message")
             assert result is False
@@ -97,7 +97,7 @@ class TestNotifier:
     def test_send_returns_false_on_exception(self, sample_config):
         """Verify send returns False when exception occurs."""
         with patch(
-            "core.notifier.send_notifications", side_effect=Exception("Network error")
+            "pwatch.core.notifier.send_notifications", side_effect=Exception("Network error")
         ):
             notifier = Notifier(sample_config)
             result = notifier.send("Test message")

@@ -4,7 +4,7 @@ Tests for utils/get_exchange.py - Exchange factory functionality.
 
 import pytest
 
-from utils.get_exchange import get_exchange
+from pwatch.utils.get_exchange import get_exchange
 
 
 class TestGetExchange:
@@ -12,7 +12,7 @@ class TestGetExchange:
 
     def test_get_exchange_binance(self):
         """Test getting Binance exchange instance."""
-        from exchanges.binance import BinanceExchange
+        from pwatch.exchanges.binance import BinanceExchange
 
         result = get_exchange("binance")
 
@@ -20,7 +20,7 @@ class TestGetExchange:
 
     def test_get_exchange_binance_uppercase(self):
         """Test getting Binance exchange with uppercase name."""
-        from exchanges.binance import BinanceExchange
+        from pwatch.exchanges.binance import BinanceExchange
 
         result = get_exchange("BINANCE")
 
@@ -28,7 +28,7 @@ class TestGetExchange:
 
     def test_get_exchange_binance_mixed_case(self):
         """Test getting Binance exchange with mixed case name."""
-        from exchanges.binance import BinanceExchange
+        from pwatch.exchanges.binance import BinanceExchange
 
         result = get_exchange("Binance")
 
@@ -36,7 +36,7 @@ class TestGetExchange:
 
     def test_get_exchange_okx(self):
         """Test getting OKX exchange instance."""
-        from exchanges.okx import OkxExchange
+        from pwatch.exchanges.okx import OkxExchange
 
         result = get_exchange("okx")
 
@@ -44,7 +44,7 @@ class TestGetExchange:
 
     def test_get_exchange_okx_uppercase(self):
         """Test getting OKX exchange with uppercase name."""
-        from exchanges.okx import OkxExchange
+        from pwatch.exchanges.okx import OkxExchange
 
         result = get_exchange("OKX")
 
@@ -52,7 +52,7 @@ class TestGetExchange:
 
     def test_get_exchange_bybit(self):
         """Test getting Bybit exchange instance."""
-        from exchanges.bybit import BybitExchange
+        from pwatch.exchanges.bybit import BybitExchange
 
         result = get_exchange("bybit")
 
@@ -60,7 +60,7 @@ class TestGetExchange:
 
     def test_get_exchange_bybit_uppercase(self):
         """Test getting Bybit exchange with uppercase name."""
-        from exchanges.bybit import BybitExchange
+        from pwatch.exchanges.bybit import BybitExchange
 
         result = get_exchange("BYBIT")
 
@@ -120,21 +120,21 @@ class TestGetExchange:
 
             # Check that the result is an instance of the expected class
             if "Binance" in expected_class_name:
-                from exchanges.binance import BinanceExchange
+                from pwatch.exchanges.binance import BinanceExchange
 
                 assert isinstance(result, BinanceExchange)
             elif "Okx" in expected_class_name:
-                from exchanges.okx import OkxExchange
+                from pwatch.exchanges.okx import OkxExchange
 
                 assert isinstance(result, OkxExchange)
             elif "Bybit" in expected_class_name:
-                from exchanges.bybit import BybitExchange
+                from pwatch.exchanges.bybit import BybitExchange
 
                 assert isinstance(result, BybitExchange)
 
     def test_get_exchange_returns_new_instance(self):
         """Test that each call returns a new instance."""
-        from exchanges.binance import BinanceExchange
+        from pwatch.exchanges.binance import BinanceExchange
 
         result1 = get_exchange("binance")
         result2 = get_exchange("binance")

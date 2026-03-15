@@ -108,7 +108,7 @@ def start_pricesentry():
 
     try:
         process = subprocess.Popen(
-            [venv_python, "-m", "app.runner"],
+            [venv_python, "-m", "pwatch.app.runner"],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             cwd=project_root,

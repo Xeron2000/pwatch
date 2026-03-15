@@ -7,18 +7,18 @@ from queue import Empty, Queue
 from threading import RLock
 from typing import List, Optional, Set, Tuple
 
-from core.config_manager import ConfigUpdateEvent, config_manager
-from core.notifier import Notifier
-from utils.cache_manager import notification_cooldown
-from utils.chart import generate_multi_candlestick_png
-from utils.config_validator import config_validator
-from utils.error_handler import ErrorSeverity, error_handler
-from utils.get_exchange import get_exchange
-from utils.monitor_top_movers import monitor_top_movers
-from utils.parse_timeframe import parse_timeframe
-from utils.performance_monitor import performance_monitor
-from utils.supported_markets import load_usdt_contracts
-from utils.top_volume_symbols import fetch_top_volume_symbols
+from pwatch.core.config_manager import ConfigUpdateEvent, config_manager
+from pwatch.core.notifier import Notifier
+from pwatch.utils.cache_manager import notification_cooldown
+from pwatch.utils.chart import generate_multi_candlestick_png
+from pwatch.utils.config_validator import config_validator
+from pwatch.utils.error_handler import ErrorSeverity, error_handler
+from pwatch.utils.get_exchange import get_exchange
+from pwatch.utils.monitor_top_movers import monitor_top_movers
+from pwatch.utils.parse_timeframe import parse_timeframe
+from pwatch.utils.performance_monitor import performance_monitor
+from pwatch.utils.supported_markets import load_usdt_contracts
+from pwatch.utils.top_volume_symbols import fetch_top_volume_symbols
 
 
 def load_config() -> dict:
@@ -557,7 +557,7 @@ class PriceSentry:
                 self._rebuild_notification_filter_locked()
             logging.warning(
                 "No USDT contract symbols available for exchange %s. "
-                "Ensure config/supported_markets.json is up-to-date.",
+                "Ensure supported_markets.json is up-to-date.",
                 exchange_name,
             )
             return
@@ -615,7 +615,7 @@ class PriceSentry:
         else:
             logging.warning(
                 "No USDT contract symbols available for exchange %s. "
-                "Ensure config/supported_markets.json is up-to-date.",
+                "Ensure supported_markets.json is up-to-date.",
                 exchange_name,
             )
 

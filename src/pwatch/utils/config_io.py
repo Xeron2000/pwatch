@@ -1,4 +1,4 @@
-"""Utility helpers for reading and writing PriceSentry configuration."""
+"""Utility helpers for reading and writing pwatch configuration."""
 
 from __future__ import annotations
 
@@ -7,11 +7,13 @@ from typing import Any, Dict
 
 import yaml
 
-CONFIG_PATH = Path("config/config.yaml")
+from pwatch.paths import get_config_path
 
 
-def write_config(config: Dict[str, Any], path: Path = CONFIG_PATH) -> None:
+def write_config(config: Dict[str, Any], path: Path | None = None) -> None:
     """Persist the configuration dictionary to disk as YAML."""
+    if path is None:
+        path = get_config_path()
     path = path.resolve()
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8") as fh:

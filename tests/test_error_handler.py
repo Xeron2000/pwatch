@@ -7,7 +7,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from utils.error_handler import (
+from pwatch.utils.error_handler import (
     CircuitBreaker,
     ErrorCategory,
     ErrorHandler,

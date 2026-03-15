@@ -1,6 +1,6 @@
 from typing import List
 
-from utils.send_notifications import send_notifications
+from pwatch.utils.send_notifications import send_notifications
 
 
 def test_send_notifications_with_chat_id(monkeypatch):
@@ -11,7 +11,7 @@ def test_send_notifications_with_chat_id(monkeypatch):
         return True
 
     monkeypatch.setattr(
-        "utils.send_notifications.send_telegram_message", fake_send_message
+        "pwatch.utils.send_notifications.send_telegram_message", fake_send_message
     )
 
     send_notifications(
@@ -30,7 +30,7 @@ def test_send_notifications_with_photo(monkeypatch):
         sent.append((chat_id, image_bytes))
         return True
 
-    monkeypatch.setattr("utils.send_notifications.send_telegram_photo", fake_send_photo)
+    monkeypatch.setattr("pwatch.utils.send_notifications.send_telegram_photo", fake_send_photo)
 
     send_notifications(
         "Hello",
@@ -51,7 +51,7 @@ def test_send_notifications_missing_chat_id(monkeypatch):
         return True
 
     monkeypatch.setattr(
-        "utils.send_notifications.send_telegram_message", fake_send_message
+        "pwatch.utils.send_notifications.send_telegram_message", fake_send_message
     )
 
     send_notifications(
@@ -71,7 +71,7 @@ def test_send_notifications_missing_token(monkeypatch):
         return True
 
     monkeypatch.setattr(
-        "utils.send_notifications.send_telegram_message", fake_send_message
+        "pwatch.utils.send_notifications.send_telegram_message", fake_send_message
     )
 
     send_notifications(

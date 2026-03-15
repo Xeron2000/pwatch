@@ -6,7 +6,7 @@ from unittest.mock import Mock, patch
 
 import requests
 
-from notifications.telegram import send_telegram_message, send_telegram_photo
+from pwatch.notifications.telegram import send_telegram_message, send_telegram_photo
 
 
 class TestTelegramNotification:
@@ -14,7 +14,7 @@ class TestTelegramNotification:
 
     def test_send_telegram_message_success(self):
         """Test successful Telegram message sending."""
-        with patch("notifications.telegram.requests.post") as mock_post:
+        with patch("pwatch.notifications.telegram.requests.post") as mock_post:
             # Mock successful response
             mock_response = Mock()
             mock_response.status_code = 200
@@ -36,7 +36,7 @@ class TestTelegramNotification:
 
     def test_send_telegram_message_missing_token(self):
         """Test Telegram message sending with missing token."""
-        with patch("notifications.telegram.requests.post") as mock_post:
+        with patch("pwatch.notifications.telegram.requests.post") as mock_post:
             with patch("builtins.print") as mock_print:
                 result = send_telegram_message(
                     "Test message",
@@ -50,7 +50,7 @@ class TestTelegramNotification:
 
     def test_send_telegram_message_missing_chat_id(self):
         """Test Telegram message sending with missing chat ID."""
-        with patch("notifications.telegram.requests.post") as mock_post:
+        with patch("pwatch.notifications.telegram.requests.post") as mock_post:
             with patch("builtins.print") as mock_print:
                 result = send_telegram_message(
                     "Test message",
@@ -64,7 +64,7 @@ class TestTelegramNotification:
 
     def test_send_telegram_message_api_error(self):
         """Test Telegram message sending with API error."""
-        with patch("notifications.telegram.requests.post") as mock_post:
+        with patch("pwatch.notifications.telegram.requests.post") as mock_post:
             with patch("builtins.print") as mock_print:
                 # Mock error response
                 mock_response = Mock()
@@ -81,7 +81,7 @@ class TestTelegramNotification:
 
     def test_send_telegram_message_network_error(self):
         """Test Telegram message sending with network error."""
-        with patch("notifications.telegram.requests.post") as mock_post:
+        with patch("pwatch.notifications.telegram.requests.post") as mock_post:
             with patch("builtins.print") as mock_print:
                 # Mock network error
                 mock_post.side_effect = requests.RequestException("Network error")
@@ -97,7 +97,7 @@ class TestTelegramNotification:
 
     def test_send_telegram_photo_success(self):
         """Test successful Telegram photo sending."""
-        with patch("notifications.telegram.requests.post") as mock_post:
+        with patch("pwatch.notifications.telegram.requests.post") as mock_post:
             # Mock successful response
             mock_response = Mock()
             mock_response.status_code = 200
@@ -122,7 +122,7 @@ class TestTelegramNotification:
 
     def test_send_telegram_photo_missing_token(self):
         """Test Telegram photo sending with missing token."""
-        with patch("notifications.telegram.requests.post") as mock_post:
+        with patch("pwatch.notifications.telegram.requests.post") as mock_post:
             with patch("builtins.print") as mock_print:
                 image_bytes = b"fake_image_data"
                 result = send_telegram_photo(
@@ -138,7 +138,7 @@ class TestTelegramNotification:
 
     def test_send_telegram_photo_missing_chat_id(self):
         """Test Telegram photo sending with missing chat ID."""
-        with patch("notifications.telegram.requests.post") as mock_post:
+        with patch("pwatch.notifications.telegram.requests.post") as mock_post:
             with patch("builtins.print") as mock_print:
                 image_bytes = b"fake_image_data"
                 result = send_telegram_photo(
@@ -154,7 +154,7 @@ class TestTelegramNotification:
 
     def test_send_telegram_photo_empty_caption(self):
         """Test Telegram photo sending with empty caption."""
-        with patch("notifications.telegram.requests.post") as mock_post:
+        with patch("pwatch.notifications.telegram.requests.post") as mock_post:
             # Mock successful response
             mock_response = Mock()
             mock_response.status_code = 200
@@ -176,7 +176,7 @@ class TestTelegramNotification:
 
     def test_send_telegram_photo_api_error(self):
         """Test Telegram photo sending with API error."""
-        with patch("notifications.telegram.requests.post") as mock_post:
+        with patch("pwatch.notifications.telegram.requests.post") as mock_post:
             with patch("builtins.print") as mock_print:
                 # Mock error response
                 mock_response = Mock()
@@ -196,7 +196,7 @@ class TestTelegramNotification:
 
     def test_send_telegram_photo_network_error(self):
         """Test Telegram photo sending with network error."""
-        with patch("notifications.telegram.requests.post") as mock_post:
+        with patch("pwatch.notifications.telegram.requests.post") as mock_post:
             with patch("builtins.print") as mock_print:
                 # Mock network error
                 mock_post.side_effect = requests.RequestException("Network error")
@@ -213,7 +213,7 @@ class TestTelegramNotification:
 
     def test_send_telegram_photo_file_upload(self):
         """Test Telegram photo file upload parameters."""
-        with patch("notifications.telegram.requests.post") as mock_post:
+        with patch("pwatch.notifications.telegram.requests.post") as mock_post:
             # Mock successful response
             mock_response = Mock()
             mock_response.status_code = 200
@@ -234,7 +234,7 @@ class TestTelegramNotification:
 
     def test_send_telegram_message_special_characters(self):
         """Test Telegram message sending with special characters."""
-        with patch("notifications.telegram.requests.post") as mock_post:
+        with patch("pwatch.notifications.telegram.requests.post") as mock_post:
             # Mock successful response
             mock_response = Mock()
             mock_response.status_code = 200
@@ -249,7 +249,7 @@ class TestTelegramNotification:
 
     def test_send_telegram_message_long_text(self):
         """Test Telegram message sending with long text."""
-        with patch("notifications.telegram.requests.post") as mock_post:
+        with patch("pwatch.notifications.telegram.requests.post") as mock_post:
             # Mock successful response
             mock_response = Mock()
             mock_response.status_code = 200
@@ -264,7 +264,7 @@ class TestTelegramNotification:
 
     def test_send_telegram_photo_large_image(self):
         """Test Telegram photo sending with large image data."""
-        with patch("notifications.telegram.requests.post") as mock_post:
+        with patch("pwatch.notifications.telegram.requests.post") as mock_post:
             # Mock successful response
             mock_response = Mock()
             mock_response.status_code = 200

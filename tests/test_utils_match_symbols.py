@@ -6,7 +6,7 @@ import json
 import re
 from unittest.mock import mock_open, patch
 
-from utils.match_symbols import match_symbols
+from pwatch.utils.match_symbols import match_symbols
 
 
 class TestMatchSymbols:

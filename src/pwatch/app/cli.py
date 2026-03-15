@@ -1,5 +1,6 @@
 """Main CLI entry point for pwatch."""
 
+import argparse
 import asyncio
 import logging
 import sys
@@ -375,8 +376,49 @@ def load_config(config_path):
         return yaml.safe_load(f) or {}
 
 
-def main():
-    """Main entry point."""
+def cmd_update_markets(args):
+    """Subcommand: update supported market data."""
+    from pwatch.utils.setup_logging import setup_logging
+    from pwatch.utils.supported_markets import list_cached_exchanges, refresh_supported_markets
+
+    setup_logging()
+
+    DEFAULT_EXCHANGES = ["okx", "binance", "bybit"]
+    exchange_names = list(args.exchanges or [])
+
+    if not exchange_names:
+        seeds = list(DEFAULT_EXCHANGES)
+
+        config_path = get_config_path()
+        if config_path.exists():
+            config = load_config(config_path)
+            if config:
+                config_exchanges = config.get("exchanges")
+                if isinstance(config_exchanges, (list, tuple)):
+                    seeds.extend(str(name) for name in config_exchanges if name)
+                primary = config.get("exchange")
+                if primary:
+                    seeds.append(str(primary))
+
+        cached = list_cached_exchanges()
+        seeds.extend(cached)
+        exchange_names = seeds
+
+    exchange_names = list(dict.fromkeys(name for name in exchange_names if name))
+    if not exchange_names:
+        logging.warning("No exchanges to update.")
+        return
+
+    logging.info("Updating supported markets for: %s", ", ".join(exchange_names))
+    refreshed = refresh_supported_markets(exchange_names)
+    if refreshed:
+        logging.info("Updated %s exchanges: %s", len(refreshed), ", ".join(sorted(refreshed)))
+    else:
+        logging.warning("No exchanges produced market data.")
+
+
+def cmd_run(args):
+    """Subcommand: run price monitoring (default)."""
     from pwatch.utils.setup_logging import setup_logging
 
     setup_logging()
@@ -401,6 +443,38 @@ def main():
     except Exception as e:
         logging.error(f"❌ 启动失败: {e}")
         sys.exit(1)
+
+
+def cmd_config_path(_args):
+    """Subcommand: print config directory path."""
+    print(get_config_dir())
+
+
+def main():
+    """Main entry point."""
+    parser = argparse.ArgumentParser(prog="pwatch", description="Cryptocurrency futures price monitor")
+    sub = parser.add_subparsers(dest="command")
+
+    # pwatch run (default)
+    sub.add_parser("run", help="Start price monitoring")
+
+    # pwatch update-markets
+    um = sub.add_parser("update-markets", help="Fetch and cache supported market data")
+    um.add_argument("--exchanges", nargs="+", help="Exchanges to update (default: all)")
+
+    # pwatch config-path
+    sub.add_parser("config-path", help="Print config directory path")
+
+    args = parser.parse_args()
+
+    commands = {
+        "run": cmd_run,
+        "update-markets": cmd_update_markets,
+        "config-path": cmd_config_path,
+    }
+
+    handler = commands.get(args.command, cmd_run)
+    handler(args)
 
 
 if __name__ == "__main__":

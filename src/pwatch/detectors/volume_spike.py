@@ -34,16 +34,17 @@ class VolumeSpikeDetector(BaseDetector):
     # ------------------------------------------------------------------
 
     def on_volume_update(self, symbol: str, cumulative_volume: float, timestamp: float):
-        if not self.enabled:
-            return
+        with self._lock:
+            if not self.enabled:
+                return
 
-        history = self._volume_history.get(symbol)
-        if history is None:
-            history = deque(maxlen=_MAX_SAMPLES)
-            self._volume_history[symbol] = history
+            history = self._volume_history.get(symbol)
+            if history is None:
+                history = deque(maxlen=_MAX_SAMPLES)
+                self._volume_history[symbol] = history
 
-        history.append((timestamp, cumulative_volume))
-        self._check_spike(symbol, timestamp)
+            history.append((timestamp, cumulative_volume))
+            self._check_spike(symbol, timestamp)
 
     # ------------------------------------------------------------------
     # Internal
@@ -118,12 +119,13 @@ class VolumeSpikeDetector(BaseDetector):
         )
 
     def update_config(self, config: dict):
-        super().update_config(config)
-        vs = config.get("volumeSpike", {})
-        self.enabled = vs.get("enabled", True)
-        self.multiplier = vs.get("multiplier", 3.0)
-        self.window_minutes = vs.get("windowMinutes", 10)
-        self.min_notify_seconds = _parse_seconds(vs.get("minNotifyInterval", "2m"))
+        with self._lock:
+            super().update_config(config)
+            vs = config.get("volumeSpike", {})
+            self.enabled = vs.get("enabled", True)
+            self.multiplier = vs.get("multiplier", 3.0)
+            self.window_minutes = vs.get("windowMinutes", 10)
+            self.min_notify_seconds = _parse_seconds(vs.get("minNotifyInterval", "2m"))
 
 
 def _parse_seconds(value) -> float:

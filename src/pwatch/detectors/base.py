@@ -1,6 +1,7 @@
 """Base classes for real-time anomaly detection."""
 
 import logging
+import threading
 import time
 from dataclasses import dataclass, field
 from typing import Callable, List
@@ -26,6 +27,7 @@ class BaseDetector:
 
     def __init__(self, config: dict):
         self.config = config
+        self._lock = threading.RLock()
         self._callbacks: List[Callable[[AnomalyEvent], None]] = []
         self.logger = logging.getLogger(self.__class__.__name__)
 
@@ -49,4 +51,5 @@ class BaseDetector:
 
     def update_config(self, config: dict):
         """Update detector configuration at runtime."""
-        self.config = config
+        with self._lock:
+            self.config = config

@@ -127,6 +127,24 @@ class ErrorHandler:
         """Retry function with exponential backoff."""
 
         def decorator(f: Callable) -> Callable:
+            if asyncio.iscoroutinefunction(f):
+
+                @functools.wraps(f)
+                async def async_wrapper(*args, **kwargs):
+                    last_exception = None
+                    for attempt in range(max_retries + 1):
+                        try:
+                            return await f(*args, **kwargs)
+                        except retryable_exceptions as e:
+                            last_exception = e
+                            if attempt == max_retries:
+                                raise
+                            delay = min(base_delay * (backoff_factor**attempt), max_delay)
+                            await asyncio.sleep(delay)
+                    raise last_exception
+
+                return async_wrapper
+
             @functools.wraps(f)
             def wrapper(*args, **kwargs):
                 return self._retry_with_backoff_impl(
@@ -446,7 +464,7 @@ class ErrorHandler:
         """Reset all circuit breakers."""
         for circuit_breaker in self.circuit_breakers.values():
             circuit_breaker.failure_count = 0
-            circuit_breaker.state = "closed"
+            circuit_breaker.state = "CLOSED"
             circuit_breaker.last_failure_time = None
 
         self.logger.info("All circuit breakers reset")

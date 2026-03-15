@@ -165,8 +165,10 @@ class TestBaseExchange:
             assert result["BTC/USDT"] == 50000.0  # From WebSocket
             assert result["ETH/USDT"] == 3000.0  # From API
 
-    def test_get_price_minutes_ago_no_websocket(self):
+    async def test_get_price_minutes_ago_no_websocket(self):
         """Test getting historical prices when WebSocket is not connected."""
+        import asyncio
+
         with patch("pwatch.exchanges.base.ccxt.exchanges", ["binance"]), patch(
             "pwatch.exchanges.base.ccxt.binance"
         ) as mock_binance, patch("time.time", return_value=1640995200):
@@ -181,13 +183,15 @@ class TestBaseExchange:
             exchange = _TestExchangeImpl("binance")
             exchange.ws_connected = False
 
-            result = exchange.get_price_minutes_ago(["BTC/USDT"], 1)
+            result = await exchange.get_price_minutes_ago(["BTC/USDT"], 1)
 
             assert result["BTC/USDT"] == 50000.0
             mock_exchange.fetch_ohlcv.assert_called_once()
 
-    def test_get_price_minutes_ago_with_websocket(self):
+    async def test_get_price_minutes_ago_with_websocket(self):
         """Test getting historical prices when WebSocket is connected."""
+        import asyncio
+
         with patch("pwatch.exchanges.base.ccxt.exchanges", ["binance"]), patch(
             "pwatch.exchanges.base.ccxt.binance"
         ) as mock_binance, patch("time.time", return_value=1640995200):
@@ -203,12 +207,14 @@ class TestBaseExchange:
                 "BTC/USDT": [(target_time, 49900.0), (1640995200000, 50000.0)]
             }
 
-            result = exchange.get_price_minutes_ago(["BTC/USDT"], 1)
+            result = await exchange.get_price_minutes_ago(["BTC/USDT"], 1)
 
             assert result["BTC/USDT"] == 49900.0
 
-    def test_get_price_minutes_ago_fallback_to_api(self):
+    async def test_get_price_minutes_ago_fallback_to_api(self):
         """Test fallback to API when historical data is too old."""
+        import asyncio
+
         with patch("pwatch.exchanges.base.ccxt.exchanges", ["binance"]), patch(
             "pwatch.exchanges.base.ccxt.binance"
         ) as mock_binance, patch("time.time", return_value=1640995200):
@@ -227,7 +233,7 @@ class TestBaseExchange:
             old_time = 1640995200000 - 700000  # More than 10 minutes ago
             exchange.historical_prices = {"BTC/USDT": [(old_time, 49000.0)]}
 
-            result = exchange.get_price_minutes_ago(["BTC/USDT"], 1)
+            result = await exchange.get_price_minutes_ago(["BTC/USDT"], 1)
 
             assert result["BTC/USDT"] == 50000.0  # From API
             mock_exchange.fetch_ohlcv.assert_called_once()
@@ -404,8 +410,9 @@ class TestBaseExchange:
             assert result == {}
             mock_logging.error.assert_called()
 
-    def test_error_handling_get_historical_prices(self):
+    async def test_error_handling_get_historical_prices(self):
         """Test error handling in get_price_minutes_ago."""
+        import asyncio
         with patch("pwatch.exchanges.base.ccxt.exchanges", ["binance"]), patch(
             "pwatch.exchanges.base.ccxt.binance"
         ) as mock_binance, patch("pwatch.exchanges.base.logging") as mock_logging:
@@ -418,7 +425,7 @@ class TestBaseExchange:
             exchange = _TestExchangeImpl("binance")
             exchange.ws_connected = False
 
-            result = exchange.get_price_minutes_ago(["BTC/USDT"], 1)
+            result = await exchange.get_price_minutes_ago(["BTC/USDT"], 1)
 
             # Should return empty dict on error
             assert result == {}

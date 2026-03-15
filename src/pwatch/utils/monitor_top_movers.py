@@ -41,7 +41,7 @@ async def monitor_top_movers(
     ):
         raise ValueError("Exchange must implement 'get_price_minutes_ago' and 'get_current_prices' methods")
 
-    initial_prices = exchange.get_price_minutes_ago(symbols, minutes)
+    initial_prices = await exchange.get_price_minutes_ago(symbols, minutes)
 
     updated_prices = await exchange.get_current_prices(symbols)
 
@@ -49,6 +49,7 @@ async def monitor_top_movers(
         symbol: ((updated_prices[symbol] - initial_prices[symbol]) / initial_prices[symbol]) * 100
         for symbol in initial_prices
         if symbol in updated_prices
+        if initial_prices[symbol] > 0
         if abs((updated_prices[symbol] - initial_prices[symbol]) / initial_prices[symbol]) * 100 > threshold
     }
 

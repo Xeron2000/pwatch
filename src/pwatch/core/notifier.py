@@ -1,5 +1,6 @@
 # core/notifier.py
 
+import logging
 from typing import Any, Dict, Optional
 
 from pwatch.utils.send_notifications import send_notifications
@@ -40,5 +41,5 @@ class Notifier:
             )
         except Exception as exc:
             # Log the error but don't raise it
-            print(f"Error sending notification: {exc}")
+            logging.error("Error sending notification: %s", exc)
             return False

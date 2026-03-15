@@ -1,4 +1,5 @@
 import asyncio
+import bisect
 import logging
 import threading
 import time
@@ -41,6 +42,7 @@ class BaseExchange(ABC):
             self.ws_data = {}
             self.last_prices = {}
             self.historical_prices = {}
+            self._price_lock = threading.Lock()
             self._last_cleanup_time = 0  # Track last cleanup time
             self.ws_thread = None
             self.running = False
@@ -72,6 +74,9 @@ class BaseExchange(ABC):
 
     def _notify_detectors_price(self, symbol: str, price: float) -> None:
         """Notify all detectors of a price update (called from WS thread)."""
+        if not (0 < price < 1e12):
+            logging.debug("Ignoring out-of-range price for %s: %s", symbol, price)
+            return
         ts = time.time()
         for d in self._detectors:
             try:
@@ -96,11 +101,10 @@ class BaseExchange(ABC):
         """
         timestamp = int(time.time() * 1000)
 
-        # Initialize deque for new symbols
-        if symbol not in self.historical_prices:
-            self.historical_prices[symbol] = deque(maxlen=HISTORICAL_PRICE_MAX_LEN)
-
-        self.historical_prices[symbol].append((timestamp, price))
+        with self._price_lock:
+            if symbol not in self.historical_prices:
+                self.historical_prices[symbol] = deque(maxlen=HISTORICAL_PRICE_MAX_LEN)
+            self.historical_prices[symbol].append((timestamp, price))
 
         # Periodic cleanup (not on every message)
         current_time = time.time()
@@ -113,24 +117,21 @@ class BaseExchange(ABC):
         cutoff = int(time.time() * 1000) - HISTORICAL_PRICE_MAX_AGE_MS
         total_removed = 0
 
-        for symbol in list(self.historical_prices.keys()):
-            prices = self.historical_prices[symbol]
-            original_len = len(prices)
-
-            # Remove old entries from the left (oldest first)
-            while prices and prices[0][0] < cutoff:
-                prices.popleft()
-
-            total_removed += original_len - len(prices)
-
-            # Remove empty deques
-            if not prices:
-                del self.historical_prices[symbol]
+        with self._price_lock:
+            for symbol in list(self.historical_prices.keys()):
+                prices = self.historical_prices[symbol]
+                original_len = len(prices)
+                while prices and prices[0][0] < cutoff:
+                    prices.popleft()
+                total_removed += original_len - len(prices)
+                if not prices:
+                    del self.historical_prices[symbol]
 
         if total_removed > 0:
             logging.debug(
-                f"Cleaned up {total_removed} old historical price entries, "
-                f"{len(self.historical_prices)} symbols remaining"
+                "Cleaned up %d old historical price entries, %d symbols remaining",
+                total_removed,
+                len(self.historical_prices),
             )
 
     @abstractmethod
@@ -237,16 +238,14 @@ class BaseExchange(ABC):
             result = cached_prices.copy()
 
             if not self.ws_connected:
-                # If WebSocket not connected, use API call
+                # If WebSocket not connected, use API call (non-blocking)
                 try:
                     timer_id = performance_monitor.start_timer("api_price_fetch")
                     for symbol in missing_symbols:
-                        # Call API to get price
-                        ticker = self.exchange.fetch_ticker(symbol)
+                        ticker = await asyncio.to_thread(self.exchange.fetch_ticker, symbol)
                         if ticker and hasattr(ticker, "__getitem__") and "last" in ticker and ticker["last"]:
                             price = float(ticker["last"])
                             result[symbol] = price
-                            # Update cache
                             price_cache.set_price(symbol, price)
                             performance_monitor.record_counter("cache_misses", 1)
                     performance_monitor.stop_timer(timer_id, "api_price_fetch")
@@ -266,11 +265,12 @@ class BaseExchange(ABC):
                 return result
 
             # If WebSocket is connected, try to get from WebSocket data
-            for symbol in missing_symbols:
-                if symbol in self.last_prices:
-                    result[symbol] = self.last_prices[symbol]
-                    price_cache.set_price(symbol, self.last_prices[symbol])
-                    performance_monitor.record_counter("cache_misses", 1)
+            with self._price_lock:
+                ws_snapshot = {s: self.last_prices[s] for s in missing_symbols if s in self.last_prices}
+            for symbol, price in ws_snapshot.items():
+                result[symbol] = price
+                price_cache.set_price(symbol, price)
+                performance_monitor.record_counter("cache_misses", 1)
 
             # For symbols still missing, use API
             still_missing = [s for s in symbols if result.get(s) is None]
@@ -278,12 +278,10 @@ class BaseExchange(ABC):
                 try:
                     timer_id = performance_monitor.start_timer("api_price_fetch_missing")
                     for symbol in still_missing:
-                        # Call API to get price
-                        ticker = self.exchange.fetch_ticker(symbol)
+                        ticker = await asyncio.to_thread(self.exchange.fetch_ticker, symbol)
                         if ticker and hasattr(ticker, "__getitem__") and "last" in ticker and ticker["last"]:
                             price = float(ticker["last"])
                             result[symbol] = price
-                            # Update cache
                             price_cache.set_price(symbol, price)
                             performance_monitor.record_counter("cache_misses", 1)
                     performance_monitor.stop_timer(timer_id, "api_price_fetch_missing")
@@ -321,83 +319,72 @@ class BaseExchange(ABC):
             performance_monitor.record_counter("get_current_prices_errors", 1)
             raise
 
-    def get_price_minutes_ago(self, symbols, minutes):
+    def _fetch_ohlcv_price(self, symbol: str, minutes: int):
+        """Fetch close price from N minutes ago via REST API (blocking). Returns float or None."""
+        try:
+            since = int((time.time() - minutes * 60) * 1000)
+            ohlcv = self.exchange.fetch_ohlcv(
+                symbol, "1m", since=since, limit=1, params=self._get_ohlcv_params(symbol)
+            )
+            if ohlcv and len(ohlcv) > 0:
+                return float(ohlcv[0][4])
+        except Exception as e:
+            logging.error("Error fetching OHLCV for %s: %s", symbol, e)
+        return None
+
+    @staticmethod
+    def _bisect_closest(prices_deque, target_time_ms):
+        """Find the price entry closest to target_time_ms using binary search.
+
+        Assumes prices_deque is sorted by timestamp (append-only).
+        Returns (timestamp_ms, price) or None.
+        """
+        if not prices_deque:
+            return None
+        timestamps = [entry[0] for entry in prices_deque]
+        idx = bisect.bisect_left(timestamps, target_time_ms)
+        # Check idx and idx-1 for closest
+        best = None
+        best_diff = float("inf")
+        for candidate_idx in (idx - 1, idx):
+            if 0 <= candidate_idx < len(prices_deque):
+                diff = abs(prices_deque[candidate_idx][0] - target_time_ms)
+                if diff < best_diff:
+                    best_diff = diff
+                    best = prices_deque[candidate_idx]
+        return best
+
+    async def get_price_minutes_ago(self, symbols, minutes):
         """Get prices from specified minutes ago (from historical data)"""
         if not self.ws_connected:
-            # If WebSocket not connected, use API call
             result = {}
-            try:
-                for symbol in symbols:
-                    # Get historical data
-                    since = int((time.time() - minutes * 60) * 1000)  # Convert to milliseconds
-                    ohlcv = self.exchange.fetch_ohlcv(
-                        symbol,
-                        "1m",
-                        since=since,
-                        limit=1,
-                        params=self._get_ohlcv_params(symbol),
-                    )
-
-                    if ohlcv and len(ohlcv) > 0:
-                        # OHLCV format: [timestamp, open, high, low, close, volume]
-                        price = float(ohlcv[0][4])  # Close price
-                        result[symbol] = price
-            except Exception as e:
-                logging.error(f"Error getting historical prices: {e}")
-
+            for symbol in symbols:
+                price = await asyncio.to_thread(self._fetch_ohlcv_price, symbol, minutes)
+                if price is not None:
+                    result[symbol] = price
             return result
 
         target_time = int(time.time() * 1000) - (minutes * 60 * 1000)
         result = {}
 
         for symbol in symbols:
-            if symbol in self.historical_prices and self.historical_prices[symbol]:
-                # Find the price closest to target time
-                closest_price = min(
-                    self.historical_prices[symbol],
-                    key=lambda x: abs(x[0] - target_time),
-                )
+            with self._price_lock:
+                has_history = symbol in self.historical_prices and self.historical_prices[symbol]
+                snapshot = list(self.historical_prices[symbol]) if has_history else []
 
-                # If the closest price differs from target time by more than 10
-                # minutes, use API
-                if abs(closest_price[0] - target_time) > (10 * 60 * 1000):
-                    try:
-                        # Get historical data
-                        since = int((time.time() - minutes * 60) * 1000)  # Convert to milliseconds
-                        ohlcv = self.exchange.fetch_ohlcv(
-                            symbol,
-                            "1m",
-                            since=since,
-                            limit=1,
-                            params=self._get_ohlcv_params(symbol),
-                        )
+            if snapshot:
+                closest = self._bisect_closest(snapshot, target_time)
 
-                        if ohlcv and len(ohlcv) > 0:
-                            # OHLCV format: [timestamp, open, high, low, close, volume]
-                            price = float(ohlcv[0][4])  # Close price
-                            result[symbol] = price
-                    except Exception as e:
-                        logging.error(f"Error getting historical prices: {e}")
-                else:
-                    result[symbol] = closest_price[1]
-            else:
-                try:
-                    # Get historical data
-                    since = int((time.time() - minutes * 60) * 1000)  # Convert to milliseconds
-                    ohlcv = self.exchange.fetch_ohlcv(
-                        symbol,
-                        "1m",
-                        since=since,
-                        limit=1,
-                        params=self._get_ohlcv_params(symbol),
-                    )
-
-                    if ohlcv and len(ohlcv) > 0:
-                        # OHLCV format: [timestamp, open, high, low, close, volume]
-                        price = float(ohlcv[0][4])  # Close price
+                if closest is None or abs(closest[0] - target_time) > (10 * 60 * 1000):
+                    price = await asyncio.to_thread(self._fetch_ohlcv_price, symbol, minutes)
+                    if price is not None:
                         result[symbol] = price
-                except Exception as e:
-                    logging.error(f"Error getting historical prices: {e}")
+                else:
+                    result[symbol] = closest[1]
+            else:
+                price = await asyncio.to_thread(self._fetch_ohlcv_price, symbol, minutes)
+                if price is not None:
+                    result[symbol] = price
 
         return result
 

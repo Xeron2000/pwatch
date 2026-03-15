@@ -1,4 +1,5 @@
 import logging
+import os
 from typing import List
 
 from pwatch.notifications.telegram import send_telegram_message, send_telegram_photo
@@ -32,7 +33,7 @@ def send_notifications(
     for channel in notification_channels:
         try:
             if channel == "telegram":
-                token = telegram_config.get("token")
+                token = os.environ.get("PWATCH_TELEGRAM_TOKEN") or telegram_config.get("token")
                 if not token:
                     logging.warning("Telegram notifications enabled but token missing")
                     continue

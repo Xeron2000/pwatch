@@ -38,6 +38,7 @@ class TestPriorityClassification:
         mock_exchange = MagicMock()
         mock_exchange.exchange_name = "TestExchange"
         mock_exchange.get_current_prices = AsyncMock()
+        mock_exchange.get_price_minutes_ago = AsyncMock()
 
         # Initial prices
         mock_exchange.get_price_minutes_ago.return_value = {
@@ -80,6 +81,7 @@ class TestPriorityClassification:
         mock_exchange = MagicMock()
         mock_exchange.exchange_name = "TestExchange"
         mock_exchange.get_current_prices = AsyncMock()
+        mock_exchange.get_price_minutes_ago = AsyncMock()
 
         mock_exchange.get_price_minutes_ago.return_value = {"BTC/USDT": 100.0, "ETH/USDT": 100.0}
         mock_exchange.get_current_prices.return_value = {"BTC/USDT": 106.0, "ETH/USDT": 106.0}

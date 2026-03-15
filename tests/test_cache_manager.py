@@ -21,7 +21,6 @@ class TestCacheManager:
         assert self.cache.default_ttl == 300
         assert self.cache.strategy == CacheStrategy.LRU
         assert len(self.cache.cache) == 0
-        assert len(self.cache.access_order) == 0
 
     def test_set_and_get_string_key(self):
         """Test setting and getting values with string keys."""
@@ -30,7 +29,6 @@ class TestCacheManager:
 
         assert result == "test_value"
         assert len(self.cache.cache) == 1
-        assert len(self.cache.access_order) == 1
 
     def test_set_and_get_tuple_key(self):
         """Test setting and getting values with tuple keys."""
@@ -40,7 +38,6 @@ class TestCacheManager:
 
         assert result == 50000.0
         assert len(self.cache.cache) == 1
-        assert len(self.cache.access_order) == 1
 
     def test_set_and_get_dict_key(self):
         """Test setting and getting values with dict keys."""
@@ -50,7 +47,6 @@ class TestCacheManager:
 
         assert result == {"price": 50000.0, "volume": 1000.0}
         assert len(self.cache.cache) == 1
-        assert len(self.cache.access_order) == 1
 
     def test_get_nonexistent_key(self):
         """Test getting value for nonexistent key."""
@@ -124,7 +120,6 @@ class TestCacheManager:
 
         # Verify cache is empty
         assert len(self.cache.cache) == 0
-        assert len(self.cache.access_order) == 0
         assert self.cache.get("key1") is None
         assert self.cache.get("key2") is None
 

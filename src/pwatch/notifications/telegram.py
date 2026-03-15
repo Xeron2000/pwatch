@@ -1,42 +1,35 @@
+import logging
+
 import requests
+
+_TIMEOUT = 30  # seconds
 
 
 def send_telegram_message(message, telegram_token, chat_id):
     if not telegram_token or not chat_id:
-        print("Telegram token or chat ID is missing.")
+        logging.warning("Telegram token or chat ID is missing.")
         return False
 
     url = f"https://api.telegram.org/bot{telegram_token}/sendMessage"
     data = {"chat_id": chat_id, "text": message, "parse_mode": "Markdown"}
 
     try:
-        response = requests.post(url, data=data)
+        response = requests.post(url, data=data, timeout=_TIMEOUT)
         if response.status_code == 200:
-            print("Message sent to telegram successfully!")
+            logging.info("Message sent to Telegram successfully")
             return True
         else:
-            print(f"Failed to send message: {response.text}")
+            logging.warning("Failed to send Telegram message: HTTP %d", response.status_code)
             return False
     except requests.RequestException as e:
-        print(f"Error while sending Telegram message: {e}")
+        logging.error("Error sending Telegram message: %s", e)
         return False
 
 
 def send_telegram_photo(caption, telegram_token, chat_id, image_bytes):
-    """
-    Send a photo with optional caption to a Telegram chat.
-
-    Args:
-        caption (str): Caption text (supports Markdown)
-        telegram_token (str): Bot token
-        chat_id (str): Target chat id
-        image_bytes (bytes): PNG or JPEG bytes
-
-    Returns:
-        bool: True on success
-    """
+    """Send a photo with optional caption to a Telegram chat."""
     if not telegram_token or not chat_id:
-        print("Telegram token or chat ID is missing.")
+        logging.warning("Telegram token or chat ID is missing.")
         return False
 
     url = f"https://api.telegram.org/bot{telegram_token}/sendPhoto"
@@ -44,13 +37,13 @@ def send_telegram_photo(caption, telegram_token, chat_id, image_bytes):
     files = {"photo": ("chart.png", image_bytes, "image/png")}
 
     try:
-        response = requests.post(url, data=data, files=files)
+        response = requests.post(url, data=data, files=files, timeout=_TIMEOUT)
         if response.status_code == 200:
-            print("Photo sent to telegram successfully!")
+            logging.info("Photo sent to Telegram successfully")
             return True
         else:
-            print(f"Failed to send photo: {response.text}")
+            logging.warning("Failed to send Telegram photo: HTTP %d", response.status_code)
             return False
     except requests.RequestException as e:
-        print(f"Error while sending Telegram photo: {e}")
+        logging.error("Error sending Telegram photo: %s", e)
         return False

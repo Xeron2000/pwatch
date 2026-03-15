@@ -41,16 +41,17 @@ class PriceVelocityDetector(BaseDetector):
     # ------------------------------------------------------------------
 
     def on_price_update(self, symbol: str, price: float, timestamp: float):
-        if not self.enabled:
-            return
+        with self._lock:
+            if not self.enabled:
+                return
 
-        history = self._price_history.get(symbol)
-        if history is None:
-            history = deque(maxlen=_MAX_SAMPLES)
-            self._price_history[symbol] = history
+            history = self._price_history.get(symbol)
+            if history is None:
+                history = deque(maxlen=_MAX_SAMPLES)
+                self._price_history[symbol] = history
 
-        history.append((timestamp, price))
-        self._check_velocity(symbol, price, timestamp)
+            history.append((timestamp, price))
+            self._check_velocity(symbol, price, timestamp)
 
     # ------------------------------------------------------------------
     # Internal
@@ -115,8 +116,9 @@ class PriceVelocityDetector(BaseDetector):
             break
 
     def update_config(self, config: dict):
-        super().update_config(config)
-        pv = config.get("priceVelocity", {})
-        self.enabled = pv.get("enabled", True)
-        self.windows = pv.get("windows", _DEFAULT_WINDOWS)
-        self.cooldown_s = pv.get("cooldownSeconds", _NOTIFY_COOLDOWN_S)
+        with self._lock:
+            super().update_config(config)
+            pv = config.get("priceVelocity", {})
+            self.enabled = pv.get("enabled", True)
+            self.windows = pv.get("windows", _DEFAULT_WINDOWS)
+            self.cooldown_s = pv.get("cooldownSeconds", _NOTIFY_COOLDOWN_S)

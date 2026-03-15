@@ -148,6 +148,7 @@ class PriceSentry:
         await asyncio.sleep(warmup_seconds)
 
         last_check_time = time.time()  # Start from now, not 0
+        last_ws_check_time = time.time()
 
         try:
             logging.info("Entering main loop, starting price movement monitoring")
@@ -232,7 +233,8 @@ class PriceSentry:
 
                     last_check_time = current_time
 
-                if int(current_time) % 60 == 0:
+                if current_time - last_ws_check_time >= 60:
+                    last_ws_check_time = current_time
                     logging.debug("Checking WebSocket connection status")
                     if not self.exchange.ws_connected:
                         logging.warning("WebSocket connection disconnected, attempting to reconnect")

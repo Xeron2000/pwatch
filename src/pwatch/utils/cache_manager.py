@@ -66,7 +66,6 @@ class CacheManager:
         self.default_ttl = default_ttl
         self.strategy = strategy
         self.cache: OrderedDict[str, CacheEntry] = OrderedDict()
-        self.access_order: list = []  # Track access order for LRU
         self.lock = threading.RLock()
         self.logger = logging.getLogger(__name__)
 
@@ -96,58 +95,35 @@ class CacheManager:
 
     def _evict_if_needed(self):
         """Evict entries if cache is full."""
-        if len(self.cache) >= self.max_size:
-            self.evictions += 1
+        if len(self.cache) < self.max_size:
+            return
+        self.evictions += 1
 
-            if self.strategy == CacheStrategy.LRU:
-                # Remove least recently used (first in access_order)
-                if self.access_order:
-                    lru_key = self.access_order.pop(0)
-                    if lru_key in self.cache:
-                        del self.cache[lru_key]
-            elif self.strategy == CacheStrategy.LFU:
-                # Remove least frequently used
+        if self.strategy in (CacheStrategy.LRU, CacheStrategy.FIFO):
+            # OrderedDict: first item is oldest/least-recently-used
+            if self.cache:
+                self.cache.popitem(last=False)
+        elif self.strategy == CacheStrategy.LFU:
+            if self.cache:
                 lfu_key = min(self.cache.keys(), key=lambda k: self.cache[k].access_count)
                 del self.cache[lfu_key]
-                if lfu_key in self.access_order:
-                    self.access_order.remove(lfu_key)
-            elif self.strategy == CacheStrategy.FIFO:
-                # Remove first in (first in access_order)
-                if self.access_order:
-                    fifo_key = self.access_order.pop(0)
-                    if fifo_key in self.cache:
-                        del self.cache[fifo_key]
-            elif self.strategy == CacheStrategy.TTL:
-                # Remove expired entries first, then LRU
-                expired_keys = [k for k, entry in self.cache.items() if entry.is_expired()]
-                if expired_keys:
-                    expired_key = expired_keys[0]
-                    del self.cache[expired_key]
-                    if expired_key in self.access_order:
-                        self.access_order.remove(expired_key)
-                    self.expirations += 1
-                else:
-                    # Remove least recently used
-                    if self.access_order:
-                        lru_key = self.access_order.pop(0)
-                        if lru_key in self.cache:
-                            del self.cache[lru_key]
+        elif self.strategy == CacheStrategy.TTL:
+            expired_keys = [k for k, entry in self.cache.items() if entry.is_expired()]
+            if expired_keys:
+                del self.cache[expired_keys[0]]
+                self.expirations += 1
+            elif self.cache:
+                self.cache.popitem(last=False)
 
     def _cleanup_expired(self):
         """Clean up expired entries."""
-        expired_keys = []
-        for key, entry in self.cache.items():
-            if entry.is_expired():
-                expired_keys.append(key)
-
+        expired_keys = [key for key, entry in self.cache.items() if entry.is_expired()]
         for key in expired_keys:
             del self.cache[key]
-            if key in self.access_order:
-                self.access_order.remove(key)
             self.expirations += 1
 
         if expired_keys:
-            self.logger.debug(f"Cleaned up {len(expired_keys)} expired entries")
+            self.logger.debug("Cleaned up %d expired entries", len(expired_keys))
 
     def get(self, key: Union[str, tuple, dict], default: Any = None) -> Any:
         """
@@ -173,8 +149,6 @@ class CacheManager:
 
                 if entry.is_expired():
                     del self.cache[cache_key]
-                    if cache_key in self.access_order:
-                        self.access_order.remove(cache_key)
                     self.expirations += 1
                     self.misses += 1
                 else:
@@ -184,10 +158,6 @@ class CacheManager:
                     # Move to end for LRU
                     if self.strategy == CacheStrategy.LRU:
                         self.cache.move_to_end(cache_key)
-                        # Update access order
-                        if cache_key in self.access_order:
-                            self.access_order.remove(cache_key)
-                        self.access_order.append(cache_key)
 
                     self.hits += 1
                     self.access_count += 1
@@ -219,11 +189,6 @@ class CacheManager:
             entry = CacheEntry(value=value, ttl=entry_ttl)
 
             self.cache[cache_key] = entry
-
-            # Add to access order (for new entries)
-            if cache_key not in self.access_order:
-                self.access_order.append(cache_key)
-
             self.logger.debug(f"Cached entry with key: {cache_key}")
 
     def delete(self, key: Union[str, tuple, dict]) -> bool:
@@ -241,9 +206,6 @@ class CacheManager:
         with self.lock:
             if cache_key in self.cache:
                 del self.cache[cache_key]
-                # Remove from access order
-                if cache_key in self.access_order:
-                    self.access_order.remove(cache_key)
                 self.logger.debug(f"Deleted cache entry with key: {cache_key}")
                 return True
             return False
@@ -252,7 +214,6 @@ class CacheManager:
         """Clear all entries from cache."""
         with self.lock:
             self.cache.clear()
-            self.access_order.clear()
             self.logger.info("Cache cleared")
 
     def get_stats(self) -> Dict[str, Any]:

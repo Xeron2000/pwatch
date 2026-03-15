@@ -271,6 +271,7 @@ def ensure_config_exists():
 
     import yaml
 
+    config_file.touch(mode=0o600, exist_ok=True)
     with config_file.open("w", encoding="utf-8") as f:
         yaml.safe_dump(config, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
 

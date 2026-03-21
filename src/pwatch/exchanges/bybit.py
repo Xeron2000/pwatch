@@ -70,7 +70,8 @@ class BybitExchange(BaseExchange):
                                 canonical_symbol = (
                                     original_symbol if ":" in original_symbol else f"{original_symbol}:USDT"
                                 )
-                                self.last_prices[canonical_symbol] = price
+                                with self._price_lock:
+                                    self.last_prices[canonical_symbol] = price
 
                                 # Log received price data every 10 minutes
                                 if time.time() % 600 < 1:

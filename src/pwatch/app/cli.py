@@ -418,6 +418,20 @@ def cmd_update_markets(args):
         logging.warning("No exchanges produced market data.")
 
 
+
+
+def _validate_telegram_token(config: dict) -> bool:
+    """Validate Telegram token format. Returns True if valid."""
+    import re
+    telegram_config = config.get("telegram", {})
+    token = telegram_config.get("token", "")
+    if not token or token == "YOUR_TELEGRAM_TOKEN":
+        return False
+    # Token format: digits:alphanumeric
+    if not re.match(r"^\d+:[A-Za-z0-9_-]+$", token):
+        return False
+    return True
+
 def cmd_run(args):
     """Subcommand: run price monitoring (default)."""
     from pwatch.utils.setup_logging import setup_logging
@@ -431,6 +445,16 @@ def cmd_run(args):
         show_data_info()
 
         config = load_config(config_path)
+
+        # Validate Telegram token before starting
+        if "telegram" in config.get("notificationChannels", []):
+            if not _validate_telegram_token(config):
+                print("❌ Telegram token 无效或未配置")
+                print("请检查 ~/.config/pwatch/config.yaml 中的 telegram.token 设置")
+                print("格式: 123456789:ABCdefGHIjklMNOpqrsTUVwxyz")
+                sys.exit(1)
+            print("✅ Telegram token 验证通过")
+
 
         print("📊 正在验证市场数据...")
         if not ensure_market_data(config):

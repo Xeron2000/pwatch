@@ -47,11 +47,11 @@ class BinanceExchange(BaseExchange):
                             response = await websocket.recv()
                             data = json.loads(response)
 
-                            # Handle ping messages (Binance sends pings)
-                            if "e" in data and data["e"] == "ping":
-                                pong_frame = await websocket.ping()
-                                await websocket.send(pong_frame)
-                                logging.debug("Ping received, pong sent")
+                            # Binance WebSocket ping/pong is handled automatically
+                            # by websockets library at protocol level. No manual handling needed.
+                            if 'e' in data and data.get('e') == 'ping':
+                                logging.debug('Ping received from Binance, sending pong')
+                                await websocket.pong()
                                 continue
 
                             # Process ticker data
@@ -67,7 +67,8 @@ class BinanceExchange(BaseExchange):
                                 canonical_symbol = original_symbol
                                 if ":" not in canonical_symbol:
                                     canonical_symbol = f"{original_symbol}:USDT"
-                                self.last_prices[canonical_symbol] = price
+                                with self._price_lock:
+                                    self.last_prices[canonical_symbol] = price
 
                                 # Log received price data every 10 minutes
                                 if time.time() % 600 < 1:  # Approximately every 10 minutes

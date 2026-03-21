@@ -47,6 +47,10 @@ class PriceSentry:
 
             # Anomaly event queue (fed by detectors running in WS thread)
             self._anomaly_events: "Queue[AnomalyEvent]" = Queue()
+            # WebSocket consecutive failure tracking
+            self._ws_consecutive_failures: int = 0
+            self._ws_max_failures: int = 5  # Alert threshold
+            self._ws_alert_sent: bool = False
 
             # Load configuration (patchable for unit tests while defaulting to manager data)
             self.config = load_config()
@@ -205,18 +209,21 @@ class PriceSentry:
                             message, top_movers_sorted = result
                             logging.info(f"Detected price movements exceeding threshold, message content: {message}")
 
-                            # Step 1: Send text notification immediately
-                            if self.notifier.send(message):
-                                # Record notifications for cooldown tracking
-                                cooldown_source = self.config.get("notificationCooldown", "5m")
-                                try:
-                                    cooldown_seconds = parse_timeframe(cooldown_source) * 60
-                                except Exception:
-                                    cooldown_seconds = 300.0
+                            # Step 1: Record cooldown BEFORE sending to prevent race condition
+                            cooldown_source = self.config.get("notificationCooldown", "5m")
+                            try:
+                                cooldown_seconds = parse_timeframe(cooldown_source) * 60
+                            except Exception:
+                                cooldown_seconds = 300.0
 
-                                for mover in top_movers_sorted:
-                                    symbol = mover[0]
-                                    notification_cooldown.record_notification(symbol, cooldown_seconds)
+                            # Record notifications for cooldown tracking
+                            for mover in top_movers_sorted:
+                                symbol = mover[0]
+                                notification_cooldown.record_notification(symbol, cooldown_seconds)
+
+                            # Step 2: Send text notification
+                            if self.notifier.send(message):
+                                logging.info(f"Price movement alert sent successfully for {len(top_movers_sorted)} symbols")
                         else:
                             logging.info("No price movements exceeding threshold detected")
                     except Exception as e:
@@ -237,9 +244,15 @@ class PriceSentry:
                     last_ws_check_time = current_time
                     logging.debug("Checking WebSocket connection status")
                     if not self.exchange.ws_connected:
-                        logging.warning("WebSocket connection disconnected, attempting to reconnect")
+                        self._ws_consecutive_failures += 1
+                        logging.warning(f"WebSocket disconnected (连续失败: {self._ws_consecutive_failures}/{self._ws_max_failures}), attempting reconnect")
                         try:
                             self.exchange.check_ws_connection()
+                            # Reset on successful reconnect
+                            if self.exchange.ws_connected:
+                                self._ws_consecutive_failures = 0
+                                self._ws_alert_sent = False
+                                logging.info("WebSocket reconnected successfully")
                         except Exception as e:
                             error_handler.handle_network_error(
                                 e,
@@ -249,9 +262,21 @@ class PriceSentry:
                                 },
                                 ErrorSeverity.WARNING,
                             )
-                    if hasattr(self.exchange, "last_prices"):
-                        logging.debug(f"Number of symbols with cached prices: {len(self.exchange.last_prices)}")
-
+                        # Send alert if threshold reached
+                        if self._ws_consecutive_failures >= self._ws_max_failures and not self._ws_alert_sent:
+                            alert_msg = f"⚠️ **WebSocket 连接异常**\n\n连续失败 {self._ws_consecutive_failures} 次，监控可能中断。请检查网络连接。"
+                            try:
+                                self.notifier.send(alert_msg)
+                                self._ws_alert_sent = True
+                                logging.warning(f"WebSocket failure alert sent: {self._ws_consecutive_failures} consecutive failures")
+                            except Exception as e:
+                                logging.error(f"Failed to send WS alert: {e}")
+                    else:
+                        # Connected - reset failure counter
+                        if self._ws_consecutive_failures > 0:
+                            logging.info(f"WebSocket connection restored after {self._ws_consecutive_failures} failures")
+                        self._ws_consecutive_failures = 0
+                        self._ws_alert_sent = False
                 await asyncio.sleep(1)
 
         except KeyboardInterrupt:

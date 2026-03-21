@@ -103,8 +103,8 @@ class OkxExchange(BaseExchange):
                                 for item in data["data"]:
                                     inst_id = item["instId"]
                                     symbol = self._canonical_symbol(inst_id)
-                                    price = float(item["last"])
-                                    self.last_prices[symbol] = price
+                                    with self._price_lock:
+                                        self.last_prices[symbol] = price
 
                                     # Log received price data every 10 minutes
                                     if time.time() % 600 < 1:  # Approximately every 10 minutes

@@ -1,6 +1,7 @@
 import logging
 import time
 from typing import Callable
+
 import requests
 
 _TIMEOUT = 30  # seconds
@@ -29,7 +30,7 @@ def _retry_with_backoff(func: Callable, max_retries: int = _MAX_RETRIES, base_de
                 if attempt == max_retries:
                     logging.error(f"Retry attempts exhausted for {func.__name__}")
                     raise
-                
+
                 # Check for rate limit (429)
                 if hasattr(e, 'response') and e.response is not None:
                     if e.response.status_code == 429:
@@ -37,7 +38,7 @@ def _retry_with_backoff(func: Callable, max_retries: int = _MAX_RETRIES, base_de
                         logging.warning(f"Rate limited, waiting {retry_after}s before retry")
                         time.sleep(retry_after)
                         continue
-                
+
                 # Exponential backoff
                 delay = base_delay * (2 ** attempt)
                 logging.warning(f"Attempt {attempt + 1}/{max_retries} failed, retrying in {delay}s: {e}")

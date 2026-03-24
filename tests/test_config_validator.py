@@ -261,3 +261,77 @@ class TestConfigValidator:
         assert result.is_valid
         assert len(result.warnings) > 0
         assert any("chart" in str(warning).lower() for warning in result.warnings)
+
+    def test_valid_auto_mode_quality_filter_configuration(self):
+        config = {
+            "exchange": "binance",
+            "exchanges": ["binance", "okx"],
+            "defaultTimeframe": "5m",
+            "checkInterval": "1m",
+            "defaultThreshold": 1.0,
+            "notificationChannels": ["telegram"],
+            "notificationSymbols": "auto",
+            "autoModeLimit": 50,
+            "autoModeMinQuoteVolume24h": 50000000,
+            "autoModeMinOpenInterestUsd": 10000000,
+            "autoModeMinListingAgeDays": 30,
+            "autoModeMaxRecentVolatilityPct": 10.0,
+            "telegram": {"token": "123456789:ABCdef123456", "chatId": "123456789"},
+        }
+
+        result = config_validator.validate_config(config)
+        assert result.is_valid
+
+    def test_invalid_auto_mode_quality_filter_configuration(self):
+        config = {
+            "exchange": "binance",
+            "exchanges": ["binance", "okx"],
+            "defaultTimeframe": "5m",
+            "checkInterval": "1m",
+            "defaultThreshold": 1.0,
+            "notificationChannels": ["telegram"],
+            "notificationSymbols": "auto",
+            "autoModeLimit": 0,
+            "autoModeMinQuoteVolume24h": -1,
+            "autoModeMinOpenInterestUsd": -1,
+            "autoModeMinListingAgeDays": -1,
+            "autoModeMaxRecentVolatilityPct": 0,
+            "telegram": {"token": "123456789:ABCdef123456", "chatId": "123456789"},
+        }
+
+        result = config_validator.validate_config(config)
+        assert not result.is_valid
+        assert any("automode" in str(error).lower() for error in result.errors)
+
+    def test_valid_auto_mode_profile_configuration(self):
+        config = {
+            "exchange": "binance",
+            "exchanges": ["binance", "okx"],
+            "defaultTimeframe": "5m",
+            "checkInterval": "1m",
+            "defaultThreshold": 1.0,
+            "notificationChannels": ["telegram"],
+            "notificationSymbols": "auto",
+            "autoModeProfile": "aggressive",
+            "telegram": {"token": "123456789:ABCdef123456", "chatId": "123456789"},
+        }
+
+        result = config_validator.validate_config(config)
+        assert result.is_valid
+
+    def test_invalid_auto_mode_profile_configuration(self):
+        config = {
+            "exchange": "binance",
+            "exchanges": ["binance", "okx"],
+            "defaultTimeframe": "5m",
+            "checkInterval": "1m",
+            "defaultThreshold": 1.0,
+            "notificationChannels": ["telegram"],
+            "notificationSymbols": "auto",
+            "autoModeProfile": "wild-west",
+            "telegram": {"token": "123456789:ABCdef123456", "chatId": "123456789"},
+        }
+
+        result = config_validator.validate_config(config)
+        assert not result.is_valid
+        assert any("automodeprofile" in str(error).lower() for error in result.errors)

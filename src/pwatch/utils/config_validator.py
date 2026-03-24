@@ -177,6 +177,59 @@ class ConfigValidator:
             error_message="highPriorityBypassCooldown must be a boolean value",
         )
 
+        self.rules["autoModeProfile"] = ValidationRule(
+            key_path="autoModeProfile",
+            required=False,
+            data_type=str,
+            allowed_values=["conservative", "balanced", "aggressive"],
+            error_message="autoModeProfile must be one of: conservative, balanced, aggressive",
+        )
+
+        self.rules["autoModeLimit"] = ValidationRule(
+            key_path="autoModeLimit",
+            required=False,
+            data_type=int,
+            min_value=1,
+            max_value=500,
+            error_message="autoModeLimit must be between 1 and 500",
+        )
+
+        self.rules["autoModeMinQuoteVolume24h"] = ValidationRule(
+            key_path="autoModeMinQuoteVolume24h",
+            required=False,
+            data_type=(int, float),
+            min_value=0,
+            max_value=1_000_000_000_000,
+            error_message="autoModeMinQuoteVolume24h must be >= 0",
+        )
+
+        self.rules["autoModeMinOpenInterestUsd"] = ValidationRule(
+            key_path="autoModeMinOpenInterestUsd",
+            required=False,
+            data_type=(int, float),
+            min_value=0,
+            max_value=1_000_000_000_000,
+            error_message="autoModeMinOpenInterestUsd must be >= 0",
+        )
+
+        self.rules["autoModeMinListingAgeDays"] = ValidationRule(
+            key_path="autoModeMinListingAgeDays",
+            required=False,
+            data_type=int,
+            min_value=0,
+            max_value=3650,
+            error_message="autoModeMinListingAgeDays must be >= 0",
+        )
+
+        self.rules["autoModeMaxRecentVolatilityPct"] = ValidationRule(
+            key_path="autoModeMaxRecentVolatilityPct",
+            required=False,
+            data_type=(int, float),
+            min_value=0.1,
+            max_value=1000.0,
+            error_message="autoModeMaxRecentVolatilityPct must be > 0",
+        )
+
         # Telegram configuration
         self.rules["telegram.token"] = ValidationRule(
             key_path="telegram.token",

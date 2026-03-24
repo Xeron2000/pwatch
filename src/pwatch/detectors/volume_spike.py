@@ -4,7 +4,6 @@ Tracks cumulative 24h volume deltas from WebSocket ticker updates to compute
 per-minute volume, then compares against a rolling average to find spikes.
 """
 
-import time
 from collections import deque
 
 from .base import AnomalyEvent, BaseDetector

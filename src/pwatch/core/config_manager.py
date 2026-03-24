@@ -19,6 +19,30 @@ from pwatch.utils.supported_markets import load_usdt_contracts
 
 CONFIG_PATH = get_config_path()
 
+AUTO_MODE_PROFILES: Dict[str, Dict[str, Any]] = {
+    "conservative": {
+        "autoModeLimit": 40,
+        "autoModeMinQuoteVolume24h": 80_000_000,
+        "autoModeMinOpenInterestUsd": 25_000_000,
+        "autoModeMinListingAgeDays": 45,
+        "autoModeMaxRecentVolatilityPct": 6.0,
+    },
+    "balanced": {
+        "autoModeLimit": 50,
+        "autoModeMinQuoteVolume24h": 50_000_000,
+        "autoModeMinOpenInterestUsd": 15_000_000,
+        "autoModeMinListingAgeDays": 30,
+        "autoModeMaxRecentVolatilityPct": 8.0,
+    },
+    "aggressive": {
+        "autoModeLimit": 60,
+        "autoModeMinQuoteVolume24h": 25_000_000,
+        "autoModeMinOpenInterestUsd": 8_000_000,
+        "autoModeMinListingAgeDays": 14,
+        "autoModeMaxRecentVolatilityPct": 12.0,
+    },
+}
+
 Listener = Callable[["ConfigUpdateEvent"], None]
 
 
@@ -212,6 +236,12 @@ class ConfigManager:
             "notificationSymbols": ["BTC/USDT:USDT", "ETH/USDT:USDT"],
             "notificationTimezone": "Asia/Shanghai",
             "notificationCooldown": "5m",
+            "autoModeProfile": "conservative",
+            "autoModeLimit": 40,
+            "autoModeMinQuoteVolume24h": 80_000_000,
+            "autoModeMinOpenInterestUsd": 25_000_000,
+            "autoModeMinListingAgeDays": 45,
+            "autoModeMaxRecentVolatilityPct": 6.0,
             "priorityThresholds": {
                 "high": 5.0,
                 "medium": 2.0,
@@ -248,6 +278,12 @@ class ConfigManager:
             coerced, changed = self._coerce_value(value, rule)
             if changed:
                 self._set_value_by_path(normalized, key_path, coerced)
+
+        profile_name = str(normalized.get("autoModeProfile", "conservative")).strip().lower()
+        profile_defaults = AUTO_MODE_PROFILES.get(profile_name, AUTO_MODE_PROFILES["conservative"])
+        normalized["autoModeProfile"] = profile_name if profile_name in AUTO_MODE_PROFILES else "conservative"
+        for key, value in profile_defaults.items():
+            normalized.setdefault(key, value)
 
         # Normalize notification symbol selections: trim, deduplicate, maintain order.
         # Support "default" keyword for market cap top 50 symbols

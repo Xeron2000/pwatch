@@ -2,11 +2,15 @@
 Tests for core/sentry.py - PriceSentry main controller.
 """
 
-from unittest.mock import Mock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
 from pwatch.core.sentry import PriceSentry
+
+
+class _StopLoop(Exception):
+    """Test-only exception used to stop the infinite monitoring loop safely."""
 
 
 class TestPriceSentry:
@@ -164,9 +168,12 @@ class TestPriceSentry:
             mock_exchange.close = Mock()
             mock_exchange.ws_connected = True
 
-            # Simulate a short run by interrupting the loop
-            with patch("asyncio.sleep", side_effect=KeyboardInterrupt()):
-                await sentry.run()
+            # Simulate a short run by stopping the loop safely
+            with patch("time.time", side_effect=[0, 0, 61]), patch(
+                "asyncio.sleep", side_effect=[None, _StopLoop()]
+            ):
+                with pytest.raises(_StopLoop):
+                    await sentry.run()
 
             # Verify that websocket was started and closed
             mock_exchange.start_websocket.assert_called_once()
@@ -184,26 +191,42 @@ class TestPriceSentry:
         ), patch("pwatch.core.sentry.parse_timeframe", return_value=1), patch(
             "pwatch.core.sentry.monitor_top_movers"
         ) as mock_monitor, patch("pwatch.core.sentry.logging"):
-            # Mock monitor_top_movers to return price movements
-            mock_monitor.return_value = ("Price movement detected", [("BTC/USDT", 5.0)])
+            # Mock monitor_top_movers to return unified fact events
+            mock_monitor.return_value = [
+                {
+                    "symbol": "BTC/USDT:USDT",
+                    "priority": "HIGH",
+                    "change_pct": 5.0,
+                    "direction": "up",
+                    "minutes": 1,
+                    "price_from": 100.0,
+                    "price_to": 105.0,
+                }
+            ]
 
             sentry = PriceSentry()
+
+            mock_notifier.send.return_value = {
+                "success": True,
+                "reason": "sent",
+                "retryable": False,
+            }
 
             # Mock the websocket and time to simulate a short run
             mock_exchange.start_websocket = Mock()
             mock_exchange.close = Mock()
             mock_exchange.ws_connected = True
 
-            # Simulate a short run by interrupting the loop
-            with patch("asyncio.sleep", side_effect=KeyboardInterrupt()):
-                await sentry.run()
+            # Simulate a short run by stopping the loop safely
+            with patch("time.time", side_effect=[0, 0, 61, 61]), patch(
+                "asyncio.sleep", side_effect=[None, _StopLoop()]
+            ):
+                with pytest.raises(_StopLoop):
+                    await sentry.run()
 
-            # Verify that notification was sent
-            mock_notifier.send.assert_called_once_with(
-                "Price movement detected",
-                image_bytes=None,
-                image_caption="",
-            )
+            sent_message = mock_notifier.send.call_args.args[0]
+            assert "BTC/USDT:USDT" in sent_message
+            assert "5.00%" in sent_message
 
     def test_custom_check_interval_decouples_schedule(
         self, sample_config, mock_exchange, mock_notifier
@@ -273,11 +296,91 @@ class TestPriceSentry:
             mock_exchange.ws_connected = False
             mock_exchange.check_ws_connection = Mock()
 
-            # Simulate time passing and websocket check
-            with patch("time.time", side_effect=[0, 60, 120]), patch(
-                "asyncio.sleep", side_effect=KeyboardInterrupt()
+            # Simulate time passing and stop the loop safely
+            with patch("time.time", side_effect=[0, 0, 61]), patch(
+                "asyncio.sleep", side_effect=[None, _StopLoop()]
             ):
-                await sentry.run()
+                with pytest.raises(_StopLoop):
+                    await sentry.run()
 
             # Verify that reconnection was attempted
             mock_exchange.check_ws_connection.assert_called()
+
+
+    @pytest.mark.asyncio
+    async def test_run_records_final_cooldown_only_after_success(
+        self, sample_config, mock_exchange, mock_notifier
+    ):
+        with patch("pwatch.core.sentry.load_config", return_value=sample_config), patch(
+            "pwatch.core.sentry.get_exchange", return_value=mock_exchange
+        ), patch("pwatch.core.sentry.Notifier", return_value=mock_notifier), patch(
+            "pwatch.core.sentry.load_usdt_contracts", return_value=["BTC/USDT:USDT"]
+        ), patch("pwatch.core.sentry.parse_timeframe", return_value=1), patch(
+            "pwatch.core.sentry.monitor_top_movers", new=AsyncMock(return_value=[
+                {
+                    "symbol": "BTC/USDT:USDT",
+                    "priority": "HIGH",
+                    "change_pct": 6.0,
+                    "direction": "up",
+                    "minutes": 1,
+                    "price_from": 100.0,
+                    "price_to": 106.0,
+                }
+            ])), patch(
+            "pwatch.core.sentry.notification_cooldown"
+        ) as mock_cooldown, patch("pwatch.core.sentry.logging"):
+            mock_notifier.send.return_value = {
+                "success": True,
+                "reason": "sent",
+                "retryable": False,
+            }
+            mock_exchange.start_websocket = Mock()
+            mock_exchange.close = Mock()
+            mock_exchange.ws_connected = True
+
+            with patch("time.time", side_effect=[0, 0, 61]), patch(
+                "asyncio.sleep", side_effect=[None, _StopLoop()]
+            ):
+                with pytest.raises(_StopLoop):
+                    await PriceSentry().run()
+
+            mock_cooldown.record_notification.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_run_does_not_record_final_cooldown_on_send_failure(
+        self, sample_config, mock_exchange, mock_notifier
+    ):
+        with patch("pwatch.core.sentry.load_config", return_value=sample_config), patch(
+            "pwatch.core.sentry.get_exchange", return_value=mock_exchange
+        ), patch("pwatch.core.sentry.Notifier", return_value=mock_notifier), patch(
+            "pwatch.core.sentry.load_usdt_contracts", return_value=["BTC/USDT:USDT"]
+        ), patch("pwatch.core.sentry.parse_timeframe", return_value=1), patch(
+            "pwatch.core.sentry.monitor_top_movers", new=AsyncMock(return_value=[
+                {
+                    "symbol": "BTC/USDT:USDT",
+                    "priority": "HIGH",
+                    "change_pct": 6.0,
+                    "direction": "up",
+                    "minutes": 1,
+                    "price_from": 100.0,
+                    "price_to": 106.0,
+                }
+            ])), patch(
+            "pwatch.core.sentry.notification_cooldown"
+        ) as mock_cooldown, patch("pwatch.core.sentry.logging"):
+            mock_notifier.send.return_value = {
+                "success": False,
+                "reason": "timeout",
+                "retryable": True,
+            }
+            mock_exchange.start_websocket = Mock()
+            mock_exchange.close = Mock()
+            mock_exchange.ws_connected = True
+
+            with patch("time.time", side_effect=[0, 0, 61]), patch(
+                "asyncio.sleep", side_effect=[None, _StopLoop()]
+            ):
+                with pytest.raises(_StopLoop):
+                    await PriceSentry().run()
+
+            mock_cooldown.record_notification.assert_not_called()

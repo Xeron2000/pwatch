@@ -9,7 +9,6 @@ from pwatch.detectors.base import AnomalyEvent, BaseDetector
 from pwatch.detectors.price_velocity import PriceVelocityDetector
 from pwatch.detectors.volume_spike import VolumeSpikeDetector
 
-
 # ---------------------------------------------------------------------------
 # BaseDetector
 # ---------------------------------------------------------------------------
@@ -255,21 +254,23 @@ class TestFormatCombinedAlert:
         events = {"price_velocity": self._price_event(change=1.5)}
         msg = PriceSentry._format_combined_alert("BTC/USDT:USDT", events)
         assert "1.50%" in msg
-        assert "fakeout" in msg.lower()
+        assert "fakeout" not in msg.lower()
+        assert "confirmation" not in msg.lower()
 
     def test_price_only_down(self):
         events = {"price_velocity": self._price_event(change=-2.0)}
         msg = PriceSentry._format_combined_alert("BTC/USDT:USDT", events)
         assert "2.00%" in msg
-        assert "bounce" in msg.lower()
+        assert "bounce" not in msg.lower()
 
-    def test_volume_only(self):
+    def test_volume_only_is_neutral(self):
         events = {"volume_spike": self._volume_event()}
         msg = PriceSentry._format_combined_alert("BTC/USDT:USDT", events)
         assert "4.0x" in msg
-        assert "breakout" in msg.lower()
+        assert "directional breakout" not in msg.lower()
+        assert "等待方向确认" in msg or "waiting for direction" in msg.lower()
 
-    def test_price_up_with_volume(self):
+    def test_price_up_with_volume_uses_cautious_confirmation_language(self):
         events = {
             "price_velocity": self._price_event(change=3.0),
             "volume_spike": self._volume_event(ratio=4.0),
@@ -277,15 +278,19 @@ class TestFormatCombinedAlert:
         msg = PriceSentry._format_combined_alert("BTC/USDT:USDT", events)
         assert "3.00%" in msg
         assert "4.0x" in msg
-        assert "rally" in msg.lower() or "continuation" in msg.lower()
+        assert "strong long" not in msg.lower()
+        assert "continuation" not in msg.lower()
+        assert "确认" in msg or "confirmed" in msg.lower()
 
-    def test_price_down_with_heavy_volume(self):
+    def test_price_down_with_heavy_volume_avoids_story_heavy_language(self):
         events = {
             "price_velocity": self._price_event(change=-5.0),
             "volume_spike": self._volume_event(ratio=6.0),
         }
         msg = PriceSentry._format_combined_alert("BTC/USDT:USDT", events)
-        assert "capitulation" in msg.lower() or "support" in msg.lower()
+        assert "5.00%" in msg
+        assert "capitulation" not in msg.lower()
+        assert "support" not in msg.lower()
 
     def test_empty_events(self):
         msg = PriceSentry._format_combined_alert("X", {})

@@ -8,6 +8,12 @@ import websockets
 from .base import BaseExchange
 
 
+def _safe_float(value):
+    if value is None or value == "":
+        return None
+    return float(value)
+
+
 class OkxExchange(BaseExchange):
     def __init__(self):
         super().__init__("okx")
@@ -42,6 +48,18 @@ class OkxExchange(BaseExchange):
             base, quote = parts[0], parts[1]
             return f"{base}/{quote}:USDT"
         return inst_id
+
+    @staticmethod
+    def _extract_price(item: dict) -> float:
+        """Extract the best available last-traded price from an OKX ticker payload."""
+        price = _safe_float(item.get("last"))
+        if price is not None:
+            return price
+        price = _safe_float(item.get("lastPrice"))
+        if price is not None:
+            return price
+        raise ValueError("OKX ticker payload missing price field 'last'/'lastPrice'")
+
 
     async def _ws_connect(self, symbols):
         """Establish WebSocket connection and subscribe to market data"""
@@ -103,6 +121,7 @@ class OkxExchange(BaseExchange):
                                 for item in data["data"]:
                                     inst_id = item["instId"]
                                     symbol = self._canonical_symbol(inst_id)
+                                    price = self._extract_price(item)
                                     with self._price_lock:
                                         self.last_prices[symbol] = price
 

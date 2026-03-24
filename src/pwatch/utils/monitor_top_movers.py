@@ -1,3 +1,4 @@
+import time
 from datetime import datetime
 from typing import Iterable, Optional
 
@@ -12,37 +13,14 @@ async def monitor_top_movers(
     config,
     allowed_symbols: Optional[Iterable[str]] = None,
     cooldown_manager=None,
-):
-    """
-    Retrieves the top movers for the given symbols on the given exchange
-    over the given time period asynchronously.
-
-    Args:
-        minutes (int): The number of minutes in the past to monitor.
-        symbols (list): A list of symbol strings for which to fetch prices.
-        threshold (float): The minimum percentage price change required to be a
-            "top mover".
-        exchange (Exchange): An instance of the Exchange class which implements the
-            'getPriceMinutesAgo' and 'getCurrentPrices' methods.
-        config (dict): Configuration dictionary loaded from config.yaml
-        allowed_symbols (Iterable[str] | None): Optional subset of symbols that should
-            trigger notifications. When provided, only price changes for these symbols
-            will be reported.
-        cooldown_manager (NotificationCooldownManager | None): Optional manager for
-            notification cooldowns.
-
-    Returns:
-        tuple[str, list[tuple[str, float, str]]] | None: (message, top_movers_sorted) where
-            top_movers_sorted is a list of (symbol, percent_change, priority).
-            Returns None if no movers meet the threshold or all are in cooldown.
-    """
+ ):
+    """Return unified batch fact events for movers exceeding the configured threshold."""
     if exchange is None or not all(
         hasattr(exchange, method) for method in ["get_price_minutes_ago", "get_current_prices"]
     ):
         raise ValueError("Exchange must implement 'get_price_minutes_ago' and 'get_current_prices' methods")
 
     initial_prices = await exchange.get_price_minutes_ago(symbols, minutes)
-
     updated_prices = await exchange.get_current_prices(symbols)
 
     price_changes = {
@@ -62,58 +40,48 @@ async def monitor_top_movers(
     if not price_changes:
         return None
 
-    # Priority classification
     priority_thresholds = config.get("priorityThresholds", {"high": 5.0, "medium": 2.0})
     high_threshold = priority_thresholds.get("high", 5.0)
     medium_threshold = priority_thresholds.get("medium", 2.0)
     bypass_cooldown_config = config.get("highPriorityBypassCooldown", True)
+    observed_at = time.time()
 
-    movers_with_priority = []
+    events = []
     for symbol, change in price_changes.items():
         abs_change = abs(change)
         if abs_change >= high_threshold:
             priority = "HIGH"
-            priority_val = 3
         elif abs_change >= medium_threshold:
             priority = "MEDIUM"
-            priority_val = 2
         else:
             priority = "LOW"
-            priority_val = 1
 
-        # Check cooldown
         if cooldown_manager:
             bypass = priority == "HIGH" and bypass_cooldown_config
             if not cooldown_manager.should_notify(symbol, bypass_cooldown=bypass):
                 continue
-            # Note: We record the notification in PriceSentry after sending successfully
-            # or we can record it here. The proposal says record_notification() should be called.
-            # Record it here so we don't notify same symbol again in same loop (unlikely but safe)
-            # Actually better record after successful send.
 
-        movers_with_priority.append((symbol, change, priority, priority_val))
+        events.append(
+            {
+                "event_type": "batch_move",
+                "symbol": symbol,
+                "priority": priority,
+                "direction": "up" if change > 0 else "down",
+                "change_pct": round(change, 4),
+                "threshold": threshold,
+                "minutes": minutes,
+                "observed_at": observed_at,
+                "price_from": initial_prices[symbol],
+                "price_to": updated_prices[symbol],
+                "magnitude_unit": "percent",
+            }
+        )
 
-    if not movers_with_priority:
+    if not events:
         return None
 
-    # Sort by priority first (desc), then by absolute change (desc)
-    top_movers_sorted = sorted(movers_with_priority, key=lambda x: (x[3], abs(x[1])), reverse=True)
-
-    timezone_str = config.get("notificationTimezone", "Asia/Shanghai")
-    message = format_movers_message(
-        exchange.exchange_name,
-        minutes,
-        timezone_str,
-        threshold,
-        len(symbols),
-        len(allowed_set) if allowed_set is not None else len(symbols),
-        len(movers_with_priority),
-        top_movers_sorted,
-        initial_prices,
-        updated_prices,
-    )
-
-    return message, [(m[0], m[1], m[2]) for m in top_movers_sorted]
+    severity_rank = {"HIGH": 3, "MEDIUM": 2, "LOW": 1}
+    return sorted(events, key=lambda event: (severity_rank[event["priority"]], abs(event["change_pct"])), reverse=True)
 
 
 def format_movers_message(

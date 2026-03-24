@@ -5,7 +5,6 @@ WebSocket tick.  When any window's change exceeds its threshold, an event
 is emitted.
 """
 
-import time
 from collections import deque
 
 from .base import AnomalyEvent, BaseDetector

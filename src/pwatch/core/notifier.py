@@ -6,6 +6,10 @@ from typing import Any, Dict, Optional
 from pwatch.utils.send_notifications import send_notifications
 
 
+def _result(success: bool, reason: str, retryable: bool) -> Dict[str, Any]:
+    return {"success": success, "reason": reason, "retryable": retryable}
+
+
 class Notifier:
     def __init__(self, config):
         self.notification_channels = config.get("notificationChannels", [])
@@ -22,14 +26,10 @@ class Notifier:
         image_bytes: Optional[bytes] = None,
         image_caption: Optional[str] = None,
         chart_metadata: Optional[Dict[str, Any]] = None,
-    ) -> bool:
-        """Send notification to configured channels.
-
-        Returns:
-            True if at least one notification was sent successfully, False otherwise.
-        """
-        if not message or not message.strip():
-            return False
+    ) -> Dict[str, Any]:
+        """Send notification to configured channels and return a structured result."""
+        if not message or not str(message).strip():
+            return _result(False, "empty_message", False)
 
         try:
             return send_notifications(
@@ -40,6 +40,5 @@ class Notifier:
                 image_caption=image_caption,
             )
         except Exception as exc:
-            # Log the error but don't raise it
             logging.error("Error sending notification: %s", exc)
-            return False
+            return _result(False, "notifier_exception", True)

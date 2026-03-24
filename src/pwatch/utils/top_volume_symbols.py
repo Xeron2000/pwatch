@@ -2,7 +2,7 @@
 
 import logging
 import time
-from typing import Optional
+from typing import Any, Optional
 
 import ccxt
 
@@ -11,46 +11,49 @@ _volume_cache: dict = {}
 _CACHE_TTL_SECONDS = 4 * 60 * 60  # 4 hours
 
 
-def fetch_top_volume_symbols(exchange_name: str, limit: int = 20) -> list[str]:
-    """
-    Fetch top N symbols by 24h trading volume from exchange.
-
-    Args:
-        exchange_name: Exchange name (okx, bybit, binance)
-        limit: Number of symbols to return
-
-    Returns:
-        List of symbols in format SYMBOL/USDT:USDT
-    """
-    cache_key = f"{exchange_name}_{limit}"
+def fetch_top_volume_symbols(
+    exchange_name: str,
+    limit: int = 20,
+    filters: Optional[dict[str, Any]] = None,
+ ) -> list[str]:
+    """Fetch top N symbols by 24h trading volume after applying quality filters."""
+    normalized_filters = _normalize_filters(filters or {})
+    cache_key = f"{exchange_name}_{limit}_{tuple(sorted(normalized_filters.items()))}"
     now = time.time()
 
-    # Check cache
     if cache_key in _volume_cache:
         cached_data, cached_time = _volume_cache[cache_key]
         if now - cached_time < _CACHE_TTL_SECONDS:
-            logging.debug(f"Using cached top volume symbols for {exchange_name}")
+            logging.debug("Using cached top volume symbols for %s", exchange_name)
             return cached_data
 
-    logging.info(f"Fetching top {limit} volume symbols from {exchange_name}")
+    logging.info("Fetching top %s volume symbols from %s", limit, exchange_name)
 
     try:
         exchange = _create_exchange(exchange_name)
-        symbols = _fetch_symbols_by_volume(exchange, limit)
+        symbols = _fetch_symbols_by_volume(exchange, limit, normalized_filters)
 
         if symbols:
             _volume_cache[cache_key] = (symbols, now)
-            logging.info(f"Fetched {len(symbols)} top volume symbols from {exchange_name}")
+            logging.info("Fetched %s top volume symbols from %s", len(symbols), exchange_name)
 
         return symbols
 
     except Exception as e:
         logging.error(f"Failed to fetch top volume symbols from {exchange_name}: {e}")
-        # Return cached data if available (even if expired)
         if cache_key in _volume_cache:
             logging.warning("Using expired cache as fallback")
             return _volume_cache[cache_key][0]
         return []
+
+
+def _normalize_filters(filters: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "minQuoteVolume24h": float(filters.get("minQuoteVolume24h", 0) or 0),
+        "minOpenInterestUsd": float(filters.get("minOpenInterestUsd", 0) or 0),
+        "minListingAgeDays": int(filters.get("minListingAgeDays", 0) or 0),
+        "maxRecentVolatilityPct": float(filters.get("maxRecentVolatilityPct", 0) or 0),
+    }
 
 
 def _create_exchange(exchange_name: str) -> ccxt.Exchange:
@@ -68,7 +71,6 @@ def _create_exchange(exchange_name: str) -> ccxt.Exchange:
 
     options = {"enableRateLimit": True}
 
-    # Binance: use USDT-margined futures API
     if exchange_name == "binance":
         options["defaultType"] = "swap"
         options["options"] = {"defaultType": "swap"}
@@ -77,49 +79,65 @@ def _create_exchange(exchange_name: str) -> ccxt.Exchange:
     return exchange
 
 
-def _fetch_symbols_by_volume(exchange: ccxt.Exchange, limit: int) -> list[str]:
-    """Fetch and sort symbols by 24h volume."""
+def _fetch_symbols_by_volume(exchange: ccxt.Exchange, limit: int, filters: dict[str, Any]) -> list[str]:
+    """Fetch, filter, and sort symbols by 24h volume."""
     exchange.load_markets()
 
     exchange_id = exchange.id.lower()
-
-    # Get all USDT perpetual futures
-    usdt_futures = []
-    for symbol, market in exchange.markets.items():
-        if not _is_usdt_perpetual(market, exchange_id):
-            continue
-        usdt_futures.append(symbol)
+    usdt_futures = [
+        symbol
+        for symbol, market in exchange.markets.items()
+        if _is_usdt_perpetual(market, exchange_id)
+    ]
 
     if not usdt_futures:
         logging.warning("No USDT perpetual futures found")
         return []
 
-    usdt_futures_set = set(usdt_futures)
-
-    # Fetch tickers for volume data
     tickers = _fetch_tickers_for_exchange(exchange, usdt_futures)
-
-    # Sort by USDT volume
-    volume_data = []
-    for symbol, ticker in tickers.items():
-        # Only include USDT perpetuals
-        if symbol not in usdt_futures_set:
+    candidate_symbols = []
+    volume_by_symbol: dict[str, float] = {}
+    for symbol in usdt_futures:
+        ticker = tickers.get(symbol)
+        if not ticker:
             continue
-
         volume = _calculate_usdt_volume(ticker)
-        if volume > 0:
-            volume_data.append((symbol, volume))
+        if volume <= 0 or volume < filters["minQuoteVolume24h"]:
+            continue
+        candidate_symbols.append(symbol)
+        volume_by_symbol[symbol] = volume
 
-    volume_data.sort(key=lambda x: x[1], reverse=True)
+    if not candidate_symbols:
+        return []
 
-    # Return top N symbols
-    top_symbols = [symbol for symbol, _ in volume_data[:limit]]
-    return top_symbols
+    if filters["minOpenInterestUsd"] > 0:
+        oi_map = _fetch_open_interest_map(exchange, candidate_symbols)
+        candidate_symbols = [
+            symbol
+            for symbol in candidate_symbols
+            if _extract_open_interest_usd(oi_map.get(symbol), tickers.get(symbol)) >= filters["minOpenInterestUsd"]
+        ]
+
+    if filters["minListingAgeDays"] > 0:
+        candidate_symbols = [
+            symbol
+            for symbol in candidate_symbols
+            if _listing_age_days(exchange.markets.get(symbol, {})) >= filters["minListingAgeDays"]
+        ]
+
+    if filters["maxRecentVolatilityPct"] > 0:
+        candidate_symbols = [
+            symbol
+            for symbol in candidate_symbols
+            if _recent_volatility_pct(exchange, symbol) <= filters["maxRecentVolatilityPct"]
+        ]
+
+    candidate_symbols.sort(key=lambda symbol: volume_by_symbol[symbol], reverse=True)
+    return candidate_symbols[:limit]
 
 
 def _calculate_usdt_volume(ticker: dict) -> float:
     """Calculate 24h USDT volume from ticker data."""
-    # Try quoteVolume first (already in USDT)
     quote_volume = ticker.get("quoteVolume")
     if quote_volume and quote_volume > 0:
         return float(quote_volume)
@@ -128,7 +146,6 @@ def _calculate_usdt_volume(ticker: dict) -> float:
     if not last_price or last_price <= 0:
         return 0
 
-    # For OKX: use volCcy24h (base currency volume) from info
     info = ticker.get("info", {})
     vol_ccy = info.get("volCcy24h")
     if vol_ccy:
@@ -137,7 +154,6 @@ def _calculate_usdt_volume(ticker: dict) -> float:
         except (ValueError, TypeError):
             pass
 
-    # Fallback: baseVolume * price
     base_volume = ticker.get("baseVolume") or 0
     if base_volume > 0:
         return float(base_volume) * float(last_price)
@@ -149,25 +165,82 @@ def _fetch_tickers_for_exchange(exchange: ccxt.Exchange, symbols: list[str]) -> 
     """Fetch tickers using exchange-appropriate method."""
     exchange_id = exchange.id.lower()
 
-    # OKX/Bybit support instType param for efficient batch fetch
     if exchange_id in ("okx", "bybit"):
         try:
             return exchange.fetch_tickers(params={"instType": "SWAP"})
         except Exception as e:
             logging.warning(f"Failed to fetch tickers with instType param: {e}")
 
-    # Binance/others: fetch all tickers (defaultType already set in exchange config)
     try:
         return exchange.fetch_tickers()
     except Exception as e:
         logging.warning(f"Failed to fetch all tickers: {e}")
 
-    # Fallback: fetch individually
     try:
         return exchange.fetch_tickers(symbols)
     except Exception as e:
         logging.warning(f"Failed to fetch tickers by symbols: {e}")
         return _fetch_tickers_individually(exchange, symbols[:100])
+
+
+def _fetch_open_interest_map(exchange: ccxt.Exchange, symbols: list[str]) -> dict[str, Any]:
+    try:
+        if hasattr(exchange, "fetch_open_interests"):
+            result = exchange.fetch_open_interests(symbols)
+            if isinstance(result, dict):
+                return result
+    except Exception as exc:
+        logging.warning("Failed to fetch open interests in batch: %s", exc)
+
+    open_interests: dict[str, Any] = {}
+    for symbol in symbols:
+        try:
+            if hasattr(exchange, "fetch_open_interest"):
+                open_interests[symbol] = exchange.fetch_open_interest(symbol)
+        except Exception:
+            continue
+    return open_interests
+
+
+def _extract_open_interest_usd(open_interest: Any, ticker: Optional[dict]) -> float:
+    if not open_interest:
+        return 0
+    for key in ("openInterestValue", "openInterestUsd", "openInterestAmountUsd", "openInterestQuote"):
+        value = open_interest.get(key) if isinstance(open_interest, dict) else None
+        if value:
+            return float(value)
+    amount = open_interest.get("openInterestAmount") if isinstance(open_interest, dict) else None
+    last_price = (ticker or {}).get("last") or (ticker or {}).get("close") or 0
+    if amount and last_price:
+        return float(amount) * float(last_price)
+    return 0
+
+
+def _listing_age_days(market: dict) -> int:
+    created = market.get("created")
+    if not created:
+        return 0
+    return int((time.time() * 1000 - created) / (24 * 60 * 60 * 1000))
+
+
+def _recent_volatility_pct(exchange: ccxt.Exchange, symbol: str) -> float:
+    try:
+        candles = exchange.fetch_ohlcv(symbol, timeframe="5m", limit=4)
+    except Exception as exc:
+        logging.warning("Failed to fetch OHLCV for %s: %s", symbol, exc)
+        return float("inf")
+
+    closes = [float(candle[4]) for candle in candles if len(candle) >= 5 and candle[4]]
+    if len(closes) < 2:
+        return float("inf")
+
+    moves = []
+    for prev, curr in zip(closes, closes[1:]):
+        if prev <= 0:
+            return float("inf")
+        moves.append(abs((curr - prev) / prev) * 100)
+
+    return max(moves) if moves else float("inf")
 
 
 def _is_usdt_perpetual(market: dict, exchange_id: str = "") -> bool:
@@ -180,11 +253,9 @@ def _is_usdt_perpetual(market: dict, exchange_id: str = "") -> bool:
         return False
 
     market_type = market.get("type")
-    # Binance: only swap (perpetual), exclude future (delivery)
     if exchange_id == "binance":
         return market_type == "swap"
 
-    # OKX/Bybit: accept both swap and future
     return market_type in ("swap", "future")
 
 
@@ -200,9 +271,10 @@ def _fetch_tickers_individually(exchange: ccxt.Exchange, symbols: list[str]) -> 
     return tickers
 
 
-def get_cache_age(exchange_name: str, limit: int = 20) -> Optional[float]:
+def get_cache_age(exchange_name: str, limit: int = 20, filters: Optional[dict[str, Any]] = None) -> Optional[float]:
     """Get age of cached data in seconds, or None if not cached."""
-    cache_key = f"{exchange_name}_{limit}"
+    normalized_filters = _normalize_filters(filters or {})
+    cache_key = f"{exchange_name}_{limit}_{tuple(sorted(normalized_filters.items()))}"
     if cache_key in _volume_cache:
         _, cached_time = _volume_cache[cache_key]
         return time.time() - cached_time

@@ -5,7 +5,7 @@ import logging
 import time
 from queue import Empty, Queue
 from threading import RLock
-from typing import List, Optional, Set, Tuple
+from typing import Any, List, Optional, Set, Tuple
 
 from pwatch.core.config_manager import ConfigUpdateEvent, config_manager
 from pwatch.core.notifier import Notifier
@@ -206,24 +206,26 @@ class PriceSentry:
                         )
 
                         if result:
-                            message, top_movers_sorted = result
-                            logging.info(f"Detected price movements exceeding threshold, message content: {message}")
-
-                            # Step 1: Record cooldown BEFORE sending to prevent race condition
-                            cooldown_source = self.config.get("notificationCooldown", "5m")
-                            try:
-                                cooldown_seconds = parse_timeframe(cooldown_source) * 60
-                            except Exception:
-                                cooldown_seconds = 300.0
-
-                            # Record notifications for cooldown tracking
-                            for mover in top_movers_sorted:
-                                symbol = mover[0]
-                                notification_cooldown.record_notification(symbol, cooldown_seconds)
-
-                            # Step 2: Send text notification
-                            if self.notifier.send(message):
-                                logging.info(f"Price movement alert sent successfully for {len(top_movers_sorted)} symbols")
+                            grouped_events = self._group_batch_events(result)
+                            logging.info(
+                                "Detected %s batch movement event(s) exceeding threshold",
+                                len(result),
+                            )
+                            for symbol, sym_events in grouped_events.items():
+                                message = self._format_combined_alert(symbol, sym_events)
+                                if message:
+                                    send_result = self._send_alert(symbol, message)
+                                    if send_result["success"]:
+                                        logging.info(
+                                            "Batch movement alert sent successfully for %s",
+                                            symbol,
+                                        )
+                                    else:
+                                        logging.warning(
+                                            "Batch movement alert failed for %s: %s",
+                                            symbol,
+                                            send_result["reason"],
+                                        )
                         else:
                             logging.info("No price movements exceeding threshold detected")
                     except Exception as e:
@@ -266,9 +268,15 @@ class PriceSentry:
                         if self._ws_consecutive_failures >= self._ws_max_failures and not self._ws_alert_sent:
                             alert_msg = f"⚠️ **WebSocket 连接异常**\n\n连续失败 {self._ws_consecutive_failures} 次，监控可能中断。请检查网络连接。"
                             try:
-                                self.notifier.send(alert_msg)
-                                self._ws_alert_sent = True
-                                logging.warning(f"WebSocket failure alert sent: {self._ws_consecutive_failures} consecutive failures")
+                                send_result = self.notifier.send(alert_msg)
+                                if send_result["success"]:
+                                    self._ws_alert_sent = True
+                                    logging.warning(
+                                        "WebSocket failure alert sent: %s consecutive failures",
+                                        self._ws_consecutive_failures,
+                                    )
+                                else:
+                                    logging.error("Failed to send WS alert: %s", send_result["reason"])
                             except Exception as e:
                                 logging.error(f"Failed to send WS alert: {e}")
                     else:
@@ -322,6 +330,34 @@ class PriceSentry:
             self.config.get("volumeSpike", {}).get("enabled", True),
         )
 
+    def _group_batch_events(self, events: list[dict]) -> dict[str, dict[str, dict]]:
+        grouped: dict[str, dict[str, dict]] = {}
+        for event in events:
+            symbol = event["symbol"]
+            grouped.setdefault(symbol, {})["batch_move"] = event
+        return grouped
+
+    def _cooldown_seconds(self) -> float:
+        cooldown_source = self.config.get("notificationCooldown", "5m")
+        try:
+            return parse_timeframe(cooldown_source) * 60
+        except Exception:
+            return 300.0
+
+    def _send_alert(self, symbol: str, message: str) -> dict[str, Any]:
+        result = self.notifier.send(message)
+        if result["success"]:
+            notification_cooldown.record_notification(symbol, self._cooldown_seconds())
+        return result
+
+    def _auto_mode_filters(self) -> dict[str, Any]:
+        return {
+            "minQuoteVolume24h": self.config.get("autoModeMinQuoteVolume24h", 0),
+            "minOpenInterestUsd": self.config.get("autoModeMinOpenInterestUsd", 0),
+            "minListingAgeDays": self.config.get("autoModeMinListingAgeDays", 0),
+            "maxRecentVolatilityPct": self.config.get("autoModeMaxRecentVolatilityPct", 0),
+        }
+
     async def _process_anomaly_events(self) -> None:
         """Drain the anomaly event queue, combine per-symbol, and send notifications."""
         events: list[AnomalyEvent] = []
@@ -334,7 +370,6 @@ class PriceSentry:
         if not events:
             return
 
-        # Group events by symbol, keeping best severity per event_type
         severity_rank = {"HIGH": 3, "MEDIUM": 2, "LOW": 1}
         by_symbol: dict[str, dict[str, AnomalyEvent]] = {}
         for ev in events:
@@ -346,28 +381,39 @@ class PriceSentry:
         for symbol, sym_events in by_symbol.items():
             message = self._format_combined_alert(symbol, sym_events)
             if message:
-                self.notifier.send(message)
+                send_result = self._send_alert(symbol, message)
+                if not send_result["success"]:
+                    logging.warning("Realtime alert failed for %s: %s", symbol, send_result["reason"])
 
     @staticmethod
-    def _format_combined_alert(symbol: str, events: dict[str, AnomalyEvent]) -> str:
-        """Format combined price + volume events into a single alert with trading hints."""
+    def _format_combined_alert(symbol: str, events: dict[str, Any]) -> str:
+        """Format batch and realtime facts into one cautious, evidence-first alert."""
         price_ev = events.get("price_velocity")
         volume_ev = events.get("volume_spike")
+        batch_ev = events.get("batch_move")
 
-        if not price_ev and not volume_ev:
+        if not price_ev and not volume_ev and not batch_ev:
             return ""
 
-        # Determine overall severity
+        def _severity(value: Any) -> str:
+            if hasattr(value, "severity"):
+                return value.severity
+            return value.get("priority", "LOW")
+
         severity_rank = {"HIGH": 3, "MEDIUM": 2, "LOW": 1}
-        max_sev = max(
-            (severity_rank.get(e.severity, 0) for e in events.values()),
-            default=0,
-        )
+        max_sev = max((severity_rank.get(_severity(e), 0) for e in events.values()), default=0)
         icon = "🚨" if max_sev >= 3 else "⚠️" if max_sev >= 2 else "ℹ️"
 
         lines = [f"{icon} **`{symbol}`**\n"]
 
-        # Price info
+        if batch_ev:
+            change = batch_ev["change_pct"]
+            arrow = "🔼" if change > 0 else "🔽"
+            lines.append(
+                f"{arrow} **{abs(change):.2f}%** in {batch_ev['minutes']}m "
+                f"(*{batch_ev['price_from']:.4f}* → *{batch_ev['price_to']:.4f}*)"
+            )
+
         if price_ev:
             d = price_ev.data
             change = d["change_pct"]
@@ -377,34 +423,27 @@ class PriceSentry:
                 f"(*{d['price_from']:.4f}* → *{d['price_to']:.4f}*)"
             )
 
-        # Volume info
         if volume_ev:
             d = volume_ev.data
             lines.append(f"📊 Volume: **{d['ratio']:.1f}x** avg ({d['window_minutes']}m window)")
 
-        # Trading suggestion
         lines.append("")
-        if price_ev and volume_ev:
-            change = price_ev.data["change_pct"]
-            ratio = volume_ev.data["ratio"]
-            if change > 0:
-                if ratio >= 5:
-                    lines.append("💡 Heavy volume breakout — strong long signal")
-                else:
-                    lines.append("💡 Volume-confirmed rally — watch for continuation")
+
+        price_like_change = None
+        if price_ev:
+            price_like_change = price_ev.data["change_pct"]
+        elif batch_ev:
+            price_like_change = batch_ev["change_pct"]
+
+        if price_like_change is not None and volume_ev:
+            if price_like_change > 0:
+                lines.append("💡 价格异动已获得量能确认")
             else:
-                if ratio >= 5:
-                    lines.append("💡 Capitulation selling — watch for support levels")
-                else:
-                    lines.append("💡 Volume-confirmed drop — risk of further downside")
+                lines.append("💡 下跌异动已获得量能确认")
         elif volume_ev:
-            lines.append("💡 Abnormal volume — watch for directional breakout")
-        elif price_ev:
-            change = price_ev.data["change_pct"]
-            if change > 0:
-                lines.append("💡 Low-volume pump — potential fakeout, wait for confirmation")
-            else:
-                lines.append("💡 Low-volume dip — possible shakeout, may bounce")
+            lines.append("💡 量能异常，等待方向确认")
+        elif price_like_change is not None:
+            lines.append("💡 仅价格异动，待量能确认")
 
         return "\n".join(lines)
 
@@ -626,8 +665,12 @@ class PriceSentry:
 
         if is_auto:
             auto_limit = self.config.get("autoModeLimit", 50)
-            logging.info("Auto mode enabled, fetching top %s volume symbols", auto_limit)
-            monitored_symbols = fetch_top_volume_symbols(exchange_name, limit=auto_limit)
+            logging.info("Auto mode enabled, fetching top %s filtered volume symbols", auto_limit)
+            monitored_symbols = fetch_top_volume_symbols(
+                exchange_name,
+                limit=auto_limit,
+                filters=self._auto_mode_filters(),
+            )
             self._last_auto_refresh = time.time()
 
             if not monitored_symbols:
@@ -730,7 +773,11 @@ class PriceSentry:
         logging.info("Auto mode: refreshing top volume symbols (4-hour interval)")
 
         try:
-            new_symbols = fetch_top_volume_symbols(exchange_name, limit=self.config.get("autoModeLimit", 50))
+            new_symbols = fetch_top_volume_symbols(
+                exchange_name,
+                limit=self.config.get("autoModeLimit", 50),
+                filters=self._auto_mode_filters(),
+            )
             if not new_symbols:
                 logging.warning("Auto refresh returned empty symbols, keeping current list")
                 return

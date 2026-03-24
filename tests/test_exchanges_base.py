@@ -167,7 +167,6 @@ class TestBaseExchange:
 
     async def test_get_price_minutes_ago_no_websocket(self):
         """Test getting historical prices when WebSocket is not connected."""
-        import asyncio
 
         with patch("pwatch.exchanges.base.ccxt.exchanges", ["binance"]), patch(
             "pwatch.exchanges.base.ccxt.binance"
@@ -190,7 +189,6 @@ class TestBaseExchange:
 
     async def test_get_price_minutes_ago_with_websocket(self):
         """Test getting historical prices when WebSocket is connected."""
-        import asyncio
 
         with patch("pwatch.exchanges.base.ccxt.exchanges", ["binance"]), patch(
             "pwatch.exchanges.base.ccxt.binance"
@@ -213,7 +211,6 @@ class TestBaseExchange:
 
     async def test_get_price_minutes_ago_fallback_to_api(self):
         """Test fallback to API when historical data is too old."""
-        import asyncio
 
         with patch("pwatch.exchanges.base.ccxt.exchanges", ["binance"]), patch(
             "pwatch.exchanges.base.ccxt.binance"
@@ -412,7 +409,6 @@ class TestBaseExchange:
 
     async def test_error_handling_get_historical_prices(self):
         """Test error handling in get_price_minutes_ago."""
-        import asyncio
         with patch("pwatch.exchanges.base.ccxt.exchanges", ["binance"]), patch(
             "pwatch.exchanges.base.ccxt.binance"
         ) as mock_binance, patch("pwatch.exchanges.base.logging") as mock_logging:

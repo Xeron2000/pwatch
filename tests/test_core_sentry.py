@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, Mock, patch
 import pytest
 
 from pwatch.core.sentry import PriceSentry
+from pwatch.detectors.base import AnomalyEvent
 
 
 class _StopLoop(Exception):
@@ -425,3 +426,75 @@ class TestPriceSentry:
                     await PriceSentry().run()
 
             mock_cooldown.record_notification.assert_not_called()
+
+
+    @pytest.mark.asyncio
+    async def test_process_anomaly_events_skips_volume_only_alerts(
+        self, sample_config, mock_exchange, mock_notifier
+    ):
+        with patch("pwatch.core.sentry.load_config", return_value=sample_config), patch(
+            "pwatch.core.sentry.get_exchange", return_value=mock_exchange
+        ), patch("pwatch.core.sentry.Notifier", return_value=mock_notifier), patch(
+            "pwatch.core.sentry.load_usdt_contracts", return_value=["BTC/USDT:USDT"]
+        ), patch("pwatch.core.sentry.parse_timeframe", return_value=5), patch(
+            "pwatch.core.sentry.logging"
+        ):
+            sentry = PriceSentry()
+            sentry._anomaly_events.put(
+                AnomalyEvent(
+                    symbol="BTC/USDT:USDT",
+                    event_type="volume_spike",
+                    severity="HIGH",
+                    data={"ratio": 25.0, "window_minutes": 10},
+                )
+            )
+
+            await sentry._process_anomaly_events()
+
+            mock_notifier.send.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_process_anomaly_events_keeps_price_volume_confirmation(
+        self, sample_config, mock_exchange, mock_notifier
+    ):
+        with patch("pwatch.core.sentry.load_config", return_value=sample_config), patch(
+            "pwatch.core.sentry.get_exchange", return_value=mock_exchange
+        ), patch("pwatch.core.sentry.Notifier", return_value=mock_notifier), patch(
+            "pwatch.core.sentry.load_usdt_contracts", return_value=["BTC/USDT:USDT"]
+        ), patch("pwatch.core.sentry.parse_timeframe", return_value=5), patch(
+            "pwatch.core.sentry.logging"
+        ):
+            sentry = PriceSentry()
+            mock_notifier.send.return_value = {
+                "success": True,
+                "reason": "sent",
+                "retryable": False,
+            }
+            sentry._anomaly_events.put(
+                AnomalyEvent(
+                    symbol="BTC/USDT:USDT",
+                    event_type="price_velocity",
+                    severity="HIGH",
+                    data={
+                        "change_pct": 1.8,
+                        "window_seconds": 60,
+                        "price_from": 100.0,
+                        "price_to": 101.8,
+                    },
+                )
+            )
+            sentry._anomaly_events.put(
+                AnomalyEvent(
+                    symbol="BTC/USDT:USDT",
+                    event_type="volume_spike",
+                    severity="HIGH",
+                    data={"ratio": 25.0, "window_minutes": 10},
+                )
+            )
+
+            await sentry._process_anomaly_events()
+
+            mock_notifier.send.assert_called_once()
+            sent_message = mock_notifier.send.call_args.args[0]
+            assert "Volume:" in sent_message
+            assert "量能确认" in sent_message

@@ -379,6 +379,12 @@ class PriceSentry:
                 sym_events[ev.event_type] = ev
 
         for symbol, sym_events in by_symbol.items():
+            has_price_confirmation = bool(
+                sym_events.get("price_velocity") or sym_events.get("batch_move")
+            )
+            if sym_events.get("volume_spike") and not has_price_confirmation:
+                continue
+
             message = self._format_combined_alert(symbol, sym_events)
             if message:
                 send_result = self._send_alert(symbol, message)

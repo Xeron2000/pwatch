@@ -21,7 +21,7 @@ pwatch update-markets --exchanges okx binance  # Update specific exchanges
 pwatch config-path                             # Show config directory
 ```
 
-First run guides you through setup — you'll need a [Telegram Bot Token](https://t.me/botfather).
+First run guides you through setup — you'll need a [Telegram Bot Token](https://t.me/botfather). By default `pwatch` starts in background; use `pwatch run` for foreground debugging.
 
 ## Config
 

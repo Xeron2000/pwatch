@@ -14,9 +14,9 @@ async def main():
         sentry = PriceSentry()
         log_level = sentry.config.get("logLevel")
         if log_level:
-            setup_logging(log_level)
+            setup_logging(log_level, console=False)
         else:
-            setup_logging()
+            setup_logging(console=False)
 
         telegram_cfg = sentry.config.get("telegram", {}) if sentry.config else {}
         bot_service = TelegramBotService(telegram_cfg.get("token"))

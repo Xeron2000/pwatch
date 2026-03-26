@@ -11,7 +11,11 @@ uv tool install git+https://github.com/Xeron2000/pwatch
 ## Usage
 
 ```bash
-pwatch                                         # Start monitoring
+pwatch                                         # Start monitoring in background
+pwatch run                                     # Run in foreground for debugging
+pwatch status                                  # Show background process status
+pwatch stop                                    # Stop background process
+pwatch logs                                    # Print background log file
 pwatch update-markets                          # Update market data
 pwatch update-markets --exchanges okx binance  # Update specific exchanges
 pwatch config-path                             # Show config directory

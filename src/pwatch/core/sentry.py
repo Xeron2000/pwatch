@@ -623,6 +623,11 @@ class PriceSentry:
             self._notification_symbol_set = set()
             return
 
+        if isinstance(selection, str) and selection.strip().lower() in {"auto", "default"}:
+            self.notification_symbols = None
+            self._notification_symbol_set = set()
+            return
+
         allowed: List[str] = []
         missing: List[str] = []
 
@@ -642,7 +647,6 @@ class PriceSentry:
                 "Ignored notificationSymbols of type %s; expected list of symbol strings.",
                 type(selection).__name__,
             )
-
         if missing:
             logging.warning(
                 "Notification symbols ignored because they are not monitored: %s",

@@ -25,3 +25,13 @@ def get_markets_path() -> Path:
 def get_symbols_path() -> Path:
     """Return path to symbols.txt."""
     return get_config_dir() / "symbols.txt"
+
+
+def get_pid_path() -> Path:
+    """Return path to pwatch.pid."""
+    return get_config_dir() / "pwatch.pid"
+
+
+def get_log_path() -> Path:
+    """Return path to pwatch.log."""
+    return get_config_dir() / "pwatch.log"

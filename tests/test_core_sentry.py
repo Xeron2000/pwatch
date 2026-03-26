@@ -104,6 +104,47 @@ class TestPriceSentry:
                 "DOGE/USDT:USDT",
             )
 
+    def test_auto_mode_does_not_warn_about_string_notification_symbols(
+        self, sample_config, mock_exchange, mock_notifier
+    ):
+        config = dict(sample_config)
+        config["notificationSymbols"] = "auto"
+        config["autoModeLimit"] = 2
+
+        with patch("pwatch.core.sentry.load_config", return_value=config), patch(
+            "pwatch.core.sentry.get_exchange", return_value=mock_exchange
+        ), patch("pwatch.core.sentry.Notifier", return_value=mock_notifier), patch(
+            "pwatch.core.sentry.fetch_top_volume_symbols",
+            return_value=["BTC/USDT:USDT", "ETH/USDT:USDT"],
+        ), patch("pwatch.core.sentry.parse_timeframe", return_value=5), patch(
+            "pwatch.core.sentry.logging"
+        ) as mock_logging:
+            sentry = PriceSentry()
+
+        assert sentry.matched_symbols == ["BTC/USDT:USDT", "ETH/USDT:USDT"]
+        assert not any(
+            "Ignored notificationSymbols of type str" in str(call)
+            for call in mock_logging.warning.call_args_list
+        )
+
+    def test_rebuild_notification_filter_ignores_auto_selector_without_warning(self):
+        sentry = PriceSentry.__new__(PriceSentry)
+        sentry.config = {"notificationSymbols": "auto"}
+        sentry.matched_symbols = ["BTC/USDT:USDT"]
+
+        with patch("pwatch.core.sentry.logging") as mock_logging:
+            sentry._rebuild_notification_filter_locked()
+
+        assert sentry.notification_symbols is None
+        assert sentry._notification_symbol_set == set()
+        assert not any(
+            "Ignored notificationSymbols of type str" in str(call)
+            for call in mock_logging.warning.call_args_list
+        )
+
+
+
+
     def test_notification_symbols_invalid_fallback(
         self, sample_config, mock_exchange, mock_notifier
     ):

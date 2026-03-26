@@ -3,9 +3,19 @@
 import argparse
 import asyncio
 import logging
+import os
+import signal
+import subprocess
 import sys
+from pathlib import Path
 
-from pwatch.paths import get_config_dir, get_config_path, get_markets_path
+from pwatch.paths import (
+    get_config_dir,
+    get_config_path,
+    get_log_path,
+    get_markets_path,
+    get_pid_path,
+)
 
 
 def get_user_input(prompt, default=None, secret=False):
@@ -417,6 +427,149 @@ def cmd_update_markets(args):
 
 
 
+def _read_pid_file() -> tuple[int, str | None] | None:
+    pid_path = get_pid_path()
+    if not pid_path.exists():
+        return None
+    try:
+        lines = pid_path.read_text(encoding="utf-8").splitlines()
+        pid = int(lines[0].strip())
+        command = lines[1].strip() if len(lines) > 1 else None
+        return pid, command
+    except (OSError, ValueError, IndexError):
+        return None
+
+
+def _pid_is_running(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except OSError:
+        return False
+    return True
+
+
+def _pid_matches_runner(pid: int) -> bool:
+    cmdline_path = Path(f"/proc/{pid}/cmdline")
+    try:
+        cmdline = cmdline_path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return False
+    runner = _get_runner_module()
+    return runner in cmdline
+
+
+def _get_running_pid() -> int | None:
+    record = _read_pid_file()
+    if record is None:
+        return None
+    pid, _command = record
+    if _pid_is_running(pid) and _pid_matches_runner(pid):
+        return pid
+    try:
+        get_pid_path().unlink()
+    except OSError:
+        pass
+    return None
+
+
+def _get_python_executable() -> str:
+    return sys.executable
+
+
+def _get_runner_module() -> str:
+    return "pwatch.app.runner"
+
+
+def _run_start_preflight() -> None:
+    config_path = ensure_config_exists()
+    show_data_info()
+    config = load_config(config_path)
+
+    if "telegram" in config.get("notificationChannels", []):
+        if not _validate_telegram_token(config):
+            print("❌ Telegram token 无效或未配置")
+            print("请检查 ~/.config/pwatch/config.yaml 中的 telegram.token 设置")
+            print("格式: 123456789:ABCdefGHIjklMNOpqrsTUVwxyz")
+            sys.exit(1)
+        telegram_chat_id = str(config.get("telegram", {}).get("chatId", "")).strip()
+        if not telegram_chat_id:
+            print("❌ Telegram chatId 未配置")
+            print("请检查 ~/.config/pwatch/config.yaml 中的 telegram.chatId 设置")
+            sys.exit(1)
+        print("✅ Telegram 配置验证通过")
+
+    print("📊 正在验证市场数据...")
+    if not ensure_market_data(config):
+        logging.error("❌ 无法获取市场数据，请检查网络或使用代理")
+        sys.exit(1)
+
+
+def _write_pid_file(pid: int) -> None:
+    get_pid_path().write_text(f"{pid}\n{_get_runner_module()}\n", encoding="utf-8")
+
+
+def cmd_start(_args):
+    """Start price monitoring in the background."""
+    running_pid = _get_running_pid()
+    log_path = get_log_path()
+    if running_pid is not None:
+        print(f"pwatch is already running in background (PID: {running_pid})")
+        print(f"Log: {log_path}")
+        return
+
+    _run_start_preflight()
+
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    with log_path.open("ab") as log_file:
+        process = subprocess.Popen(
+            [_get_python_executable(), "-m", _get_runner_module()],
+            stdout=log_file,
+            stderr=subprocess.STDOUT,
+            stdin=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+
+    if process.poll() is not None:
+        raise SystemExit("Failed to start pwatch in background")
+
+    _write_pid_file(process.pid)
+    print(f"pwatch started in background (PID: {process.pid})")
+    print(f"Log: {log_path}")
+
+
+def cmd_status(_args):
+    """Show background process status."""
+    running_pid = _get_running_pid()
+    if running_pid is None:
+        print("pwatch is not running")
+        return
+    print(f"pwatch is running (PID: {running_pid})")
+    print(f"Log: {get_log_path()}")
+
+
+def cmd_stop(_args):
+    """Stop the background process if running."""
+    running_pid = _get_running_pid()
+    if running_pid is None:
+        print("pwatch is not running")
+        return
+    os.kill(running_pid, signal.SIGTERM)
+    try:
+        get_pid_path().unlink()
+    except OSError:
+        pass
+    print(f"pwatch stopped (PID: {running_pid})")
+
+
+def cmd_logs(_args):
+    """Print the current log file contents."""
+    log_path = get_log_path()
+    if not log_path.exists():
+        print(f"Log file not found: {log_path}")
+        return
+    print(log_path.read_text(encoding="utf-8", errors="replace"), end="")
+
+
 def _validate_telegram_token(config: dict) -> bool:
     """Validate Telegram token format. Returns True if valid."""
     import re
@@ -433,35 +586,13 @@ def cmd_run(args):
     """Subcommand: run price monitoring (default)."""
     from pwatch.utils.setup_logging import setup_logging
 
-    setup_logging()
+    setup_logging(console=True)
 
     print("\n🚀 pwatch 启动中...\n")
 
     try:
-        config_path = ensure_config_exists()
-        show_data_info()
-
-        config = load_config(config_path)
-
-        # Validate Telegram credentials before starting
-        if "telegram" in config.get("notificationChannels", []):
-            if not _validate_telegram_token(config):
-                print("❌ Telegram token 无效或未配置")
-                print("请检查 ~/.config/pwatch/config.yaml 中的 telegram.token 设置")
-                print("格式: 123456789:ABCdefGHIjklMNOpqrsTUVwxyz")
-                sys.exit(1)
-            telegram_chat_id = str(config.get("telegram", {}).get("chatId", "")).strip()
-            if not telegram_chat_id:
-                print("❌ Telegram chatId 未配置")
-                print("请检查 ~/.config/pwatch/config.yaml 中的 telegram.chatId 设置")
-                sys.exit(1)
-            print("✅ Telegram 配置验证通过")
-
-
-        print("📊 正在验证市场数据...")
-        if not ensure_market_data(config):
-            logging.error("❌ 无法获取市场数据，请检查网络或使用代理")
-            sys.exit(1)
+        _run_start_preflight()
+        asyncio.run(run_monitoring())
 
         asyncio.run(run_monitoring())
 
@@ -482,8 +613,12 @@ def main():
     parser = argparse.ArgumentParser(prog="pwatch", description="Cryptocurrency futures price monitor")
     sub = parser.add_subparsers(dest="command")
 
-    # pwatch run (default)
-    sub.add_parser("run", help="Start price monitoring")
+    # pwatch run (foreground)
+    sub.add_parser("run", help="Start price monitoring in foreground")
+    sub.add_parser("start", help="Start price monitoring in background")
+    sub.add_parser("status", help="Show background process status")
+    sub.add_parser("stop", help="Stop background process")
+    sub.add_parser("logs", help="Print background log file")
 
     # pwatch update-markets
     um = sub.add_parser("update-markets", help="Fetch and cache supported market data")
@@ -496,11 +631,15 @@ def main():
 
     commands = {
         "run": cmd_run,
+        "start": cmd_start,
+        "status": cmd_status,
+        "stop": cmd_stop,
+        "logs": cmd_logs,
         "update-markets": cmd_update_markets,
         "config-path": cmd_config_path,
     }
 
-    handler = commands.get(args.command, cmd_run)
+    handler = commands.get(args.command, cmd_start)
     handler(args)
 
 

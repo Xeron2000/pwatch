@@ -63,23 +63,22 @@ VALID_TIMEFRAMES = ["1m", "5m", "15m", "1h", "1d"]
 PROMPTS = {
     "zh": {
         # Basic prompts
-        "language_select": "请选择语言 / Please select language:",
-        "language_options": "1. 中文\n2. English",
-        "welcome": "欢迎使用 PriceSentry 配置向导",
+        "language_select": "Please select language / 请选择语言:",
+        "language_options": "1. English\n2. 中文",
+        "welcome": "欢迎使用 pwatch 配置向导",
         "exchange_prompt": "选择交易所",
         "timeframe_prompt": "默认时间周期",
         "check_interval_prompt": "监控检查间隔",
         "threshold_prompt": "价格变化阈值 (%)",
         "timezone_prompt": "通知时区",
         "symbols_prompt": "监控交易对",
-        "symbols_hint": "直接回车使用 auto 模式（自动获取成交量前20），或手动输入（逗号分隔）",
+        "symbols_hint": "直接回车使用 auto 模式（自动选择通过质量过滤的活跃合约），或手动输入（逗号分隔）",
         "telegram_section": "Telegram 配置",
         "telegram_token_prompt": "Bot Token",
         "telegram_chatid_prompt": "Chat ID (可选，用作回退通道)",
-        "chart_section": "图表设置",
         "config_complete": "配置完成!",
         "using_default_symbols": "使用默认市值前50币种",
-        "using_auto_mode": "使用 auto 模式，将自动获取成交量前20交易对",
+        "using_auto_mode": "使用 auto 模式，将自动选择通过质量过滤的活跃交易对",
         # Exchange help
         "exchange_help": """💡 交易所说明:
    • OKX    - 推荐，无地区限制，API 稳定
@@ -110,7 +109,8 @@ PROMPTS = {
         # Symbols mode help
         "symbols_mode_help": """💡 交易对模式说明:
    1. auto (推荐)
-      自动获取成交量前 20 的交易对
+      自动选择通过质量过滤的活跃 USDT 永续合约
+      会综合成交额、持仓量、上市时间和近期波动率
       每 4 小时自动刷新列表
 
    2. default
@@ -132,10 +132,10 @@ PROMPTS = {
    方法2: 搜索 @getmyid_bot，发送 /start 获取
 
    获取群组 ID: 将机器人加入群组后发送消息""",
-        "telegram_chatid_optional": "Chat ID 是可选的，用作回退通道（当用户未与机器人对话时使用）",
+        "telegram_chatid_optional": "Chat ID 为必填，用于发送 Telegram 通知",
         # Advanced config
         "advanced_config_prompt": "是否配置高级选项?",
-        "advanced_config_hint": "高级选项包括: 通知冷却、优先级阈值、图表设置等",
+        "advanced_config_hint": "高级选项包括: 通知冷却、优先级阈值等",
         "cooldown_help": """💡 通知冷却时间:
    同一交易对在冷却时间内不会重复通知
    避免短时间内收到大量相同通知
@@ -156,23 +156,22 @@ PROMPTS = {
     },
     "en": {
         # Basic prompts
-        "language_select": "请选择语言 / Please select language:",
-        "language_options": "1. 中文\n2. English",
-        "welcome": "Welcome to PriceSentry Configuration Wizard",
+        "language_select": "Please select language / 请选择语言:",
+        "language_options": "1. English\n2. 中文",
+        "welcome": "Welcome to pwatch setup",
         "exchange_prompt": "Select exchange",
         "timeframe_prompt": "Default timeframe",
         "check_interval_prompt": "Check interval",
         "threshold_prompt": "Price change threshold (%)",
         "timezone_prompt": "Notification timezone",
         "symbols_prompt": "Trading pairs to monitor",
-        "symbols_hint": "Press Enter for auto mode (top 20 by volume), or input manually (comma-separated)",
+        "symbols_hint": "Press Enter for auto mode (quality-filtered active contracts), or input manually (comma-separated)",
         "telegram_section": "Telegram Configuration",
         "telegram_token_prompt": "Bot Token",
-        "telegram_chatid_prompt": "Chat ID (optional, used as fallback)",
-        "chart_section": "Chart Settings",
+        "telegram_chatid_prompt": "Chat ID (required for Telegram delivery)",
         "config_complete": "Configuration complete!",
         "using_default_symbols": "Using default top 50 symbols by market cap",
-        "using_auto_mode": "Using auto mode, will fetch top 20 symbols by volume",
+        "using_auto_mode": "Using auto mode, will select quality-filtered active symbols",
         # Exchange help
         "exchange_help": """💡 Exchange Info:
    • OKX    - Recommended, no regional restrictions, stable API
@@ -203,7 +202,8 @@ PROMPTS = {
         # Symbols mode help
         "symbols_mode_help": """💡 Trading Pairs Mode:
    1. auto (Recommended)
-      Auto-fetch top 20 pairs by volume
+      Automatically select quality-filtered active USDT perpetual contracts
+      Uses quote volume, open interest, listing age, and recent volatility
       Refreshes every 4 hours
 
    2. default
@@ -225,10 +225,10 @@ PROMPTS = {
    Method 2: Search @getmyid_bot, send /start
 
    For group ID: Add bot to group and send a message""",
-        "telegram_chatid_optional": "Chat ID is optional, used as fallback channel (when user hasn't messaged the bot)",
+        "telegram_chatid_optional": "Chat ID is required for Telegram delivery",
         # Advanced config
         "advanced_config_prompt": "Configure advanced options?",
-        "advanced_config_hint": "Advanced options include: notification cooldown, priority thresholds, chart settings, etc.",
+        "advanced_config_hint": "Advanced options include: notification cooldown and priority thresholds.",
         "cooldown_help": """💡 Notification Cooldown:
    Same trading pair won't trigger repeated notifications within cooldown period
    Prevents notification spam

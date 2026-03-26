@@ -74,33 +74,3 @@ def send_telegram_message(message, telegram_token, chat_id):
         logging.error("Error sending Telegram message after retries: %s", e)
         return False
 
-
-def _send_photo_internal(caption, telegram_token, chat_id, image_bytes):
-    """Internal function to send photo."""
-    masked_token = _mask_token(telegram_token)
-    logging.debug(f"Sending photo to chat {chat_id} (token: {masked_token})")
-    url = f"https://api.telegram.org/bot{telegram_token}/sendPhoto"
-    data = {"chat_id": chat_id, "caption": caption or "", "parse_mode": "Markdown"}
-    files = {"photo": ("chart.png", image_bytes, "image/png")}
-    response = requests.post(url, data=data, files=files, timeout=_TIMEOUT)
-    if response.status_code != 200:
-        logging.error(f"Telegram API error: HTTP {response.status_code} (token: {masked_token})")
-        exc = requests.RequestException(f"HTTP {response.status_code}")
-        exc.response = response
-        raise exc
-    return response
-
-
-@_retry_with_backoff
-def send_telegram_photo(caption, telegram_token, chat_id, image_bytes):
-    """Send a photo with optional caption to a Telegram chat."""
-    if not telegram_token or not chat_id:
-        logging.warning("Telegram token or chat ID is missing.")
-        return False
-    try:
-        _send_photo_internal(caption, telegram_token, chat_id, image_bytes)
-        logging.info("Photo sent to Telegram successfully")
-        return True
-    except Exception as e:
-        logging.error("Error sending Telegram photo after retries: %s", e)
-        return False

@@ -247,14 +247,6 @@ class ConfigValidator:
             error_message="Telegram chat ID must be a numeric string",
         )
 
-        self.rules["telegram.webhookSecret"] = ValidationRule(
-            key_path="telegram.webhookSecret",
-            required=False,
-            data_type=str,
-            custom_validator=self._validate_optional_secret,
-            error_message="Telegram webhook secret must be at least 6 characters when provided",
-        )
-
         # Timezone configuration
         self.rules["notificationTimezone"] = ValidationRule(
             key_path="notificationTimezone",
@@ -329,64 +321,6 @@ class ConfigValidator:
             error_message="Open interest sentry threshold must be between 1 and 100",
         )
 
-        # Chart configuration
-        self.rules["attachChart"] = ValidationRule(
-            key_path="attachChart",
-            required=False,
-            data_type=bool,
-            error_message="Attach chart must be a boolean value",
-        )
-
-        self.rules["chartTimeframe"] = ValidationRule(
-            key_path="chartTimeframe",
-            required=False,
-            data_type=str,
-            allowed_values=["1m", "5m", "15m", "1h", "1d"],
-            error_message="Chart timeframe must be one of: 1m, 5m, 15m, 1h, 1d",
-        )
-
-        self.rules["chartLookbackMinutes"] = ValidationRule(
-            key_path="chartLookbackMinutes",
-            required=False,
-            data_type=int,
-            min_value=5,
-            max_value=1440,
-            error_message="Chart lookback minutes must be between 5 and 1440",
-        )
-
-        self.rules["chartTheme"] = ValidationRule(
-            key_path="chartTheme",
-            required=False,
-            data_type=str,
-            allowed_values=["dark", "light"],
-            error_message="Chart theme must be either 'dark' or 'light'",
-        )
-
-        self.rules["chartImageWidth"] = ValidationRule(
-            key_path="chartImageWidth",
-            required=False,
-            data_type=int,
-            min_value=400,
-            max_value=4000,
-            error_message="Chart image width must be between 400 and 4000 pixels",
-        )
-
-        self.rules["chartImageHeight"] = ValidationRule(
-            key_path="chartImageHeight",
-            required=False,
-            data_type=int,
-            min_value=300,
-            max_value=3000,
-            error_message="Chart image height must be between 300 and 3000 pixels",
-        )
-
-        self.rules["chartImageScale"] = ValidationRule(
-            key_path="chartImageScale",
-            required=False,
-            data_type=int,
-            allowed_values=[1, 2, 3],
-            error_message="Chart image scale must be 1, 2, or 3",
-        )
 
         # Security configuration
         self.rules["security.dashboardAccessKey"] = ValidationRule(
@@ -670,22 +604,9 @@ class ConfigValidator:
             if not telegram_token:
                 result.add_error("Telegram notifications enabled but token is missing")
 
-            if not telegram_chat_id:
-                result.add_info(
-                    "Telegram fallback chat ID not configured. Notifications will rely on bound recipients."
-                )
+            if not telegram_chat_id or not str(telegram_chat_id).strip():
+                result.add_error("Telegram notifications enabled but chat ID is missing")
 
-        # Check if chart is enabled but configuration is invalid
-        attach_chart = self.get_value_by_path(config, "attachChart")
-        if attach_chart:
-            chart_timeframe = self.get_value_by_path(config, "chartTimeframe")
-            chart_lookback = self.get_value_by_path(config, "chartLookbackMinutes")
-
-            if not chart_timeframe:
-                result.add_warning("Chart attachment enabled but timeframe is not configured")
-
-            if not chart_lookback:
-                result.add_warning("Chart attachment enabled but lookback minutes is not configured")
 
     def get_config_schema(self) -> Dict[str, Any]:
         """Get configuration schema for documentation."""

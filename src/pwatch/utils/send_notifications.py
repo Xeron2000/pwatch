@@ -2,7 +2,7 @@ import logging
 import os
 from typing import Any, Dict, List
 
-from pwatch.notifications.telegram import send_telegram_message, send_telegram_photo
+from pwatch.notifications.telegram import send_telegram_message
 
 
 def _resolve_telegram_targets(telegram_config: dict) -> List[str]:
@@ -24,9 +24,7 @@ def send_notifications(
     message,
     notification_channels,
     telegram_config,
-    image_bytes=None,
-    image_caption=None,
- ) -> Dict[str, Any]:
+) -> Dict[str, Any]:
     """Send notifications to configured channels and return a structured result."""
     if not notification_channels:
         return _result(False, "no_channels", False)
@@ -50,20 +48,11 @@ def send_notifications(
 
                 for chat_id in chat_ids:
                     try:
-                        delivered = False
-                        if image_bytes is not None:
-                            delivered = send_telegram_photo(
-                                image_caption or "",
-                                token,
-                                chat_id,
-                                image_bytes,
-                            )
-                        else:
-                            delivered = send_telegram_message(
-                                message,
-                                token,
-                                chat_id,
-                            )
+                        delivered = send_telegram_message(
+                            message,
+                            token,
+                            chat_id,
+                        )
 
                         if delivered:
                             return _result(True, "sent", False)

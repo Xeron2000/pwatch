@@ -24,25 +24,6 @@ def test_send_notifications_with_chat_id(monkeypatch):
     assert result == {"success": True, "reason": "sent", "retryable": False}
 
 
-def test_send_notifications_with_photo(monkeypatch):
-    sent: List[tuple] = []
-
-    def fake_send_photo(caption, token, chat_id, image_bytes):
-        sent.append((chat_id, image_bytes))
-        return True
-
-    monkeypatch.setattr("pwatch.utils.send_notifications.send_telegram_photo", fake_send_photo)
-
-    result = send_notifications(
-        "Hello",
-        ["telegram"],
-        {"token": "dummy-token", "chatId": "123456"},
-        image_bytes=b"bytes",
-        image_caption="caption",
-    )
-
-    assert sent == [("123456", b"bytes")]
-    assert result == {"success": True, "reason": "sent", "retryable": False}
 
 
 def test_send_notifications_missing_chat_id(monkeypatch):

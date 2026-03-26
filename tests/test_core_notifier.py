@@ -34,33 +34,6 @@ class TestNotifier:
                 "Test message",
                 ["telegram"],
                 sample_config.get("telegram", {}),
-                image_bytes=None,
-                image_caption=None,
-            )
-
-    def test_send_with_image(self, sample_config):
-        expected = {"success": True, "reason": "sent", "retryable": False}
-
-        with patch(
-            "pwatch.core.notifier.send_notifications", return_value=expected
-        ) as mock_send_notifications:
-            notifier = Notifier(sample_config)
-            image_bytes = b"fake_image_data"
-            image_caption = "Test caption"
-
-            result = notifier.send(
-                "Test message with image",
-                image_bytes=image_bytes,
-                image_caption=image_caption,
-            )
-
-            assert result == expected
-            mock_send_notifications.assert_called_once_with(
-                "Test message with image",
-                ["telegram"],
-                sample_config.get("telegram", {}),
-                image_bytes=image_bytes,
-                image_caption=image_caption,
             )
 
     def test_send_ignores_empty_messages_with_structured_failure(self, sample_config):

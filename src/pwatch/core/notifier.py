@@ -1,7 +1,7 @@
 # core/notifier.py
 
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 from pwatch.utils.send_notifications import send_notifications
 
@@ -23,9 +23,6 @@ class Notifier:
     def send(
         self,
         message: str,
-        image_bytes: Optional[bytes] = None,
-        image_caption: Optional[str] = None,
-        chart_metadata: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """Send notification to configured channels and return a structured result."""
         if not message or not str(message).strip():
@@ -36,8 +33,6 @@ class Notifier:
                 message,
                 self.notification_channels,
                 self.telegram_config,
-                image_bytes=image_bytes,
-                image_caption=image_caption,
             )
         except Exception as exc:
             logging.error("Error sending notification: %s", exc)

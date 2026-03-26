@@ -251,13 +251,6 @@ class ConfigManager:
                 "token": None,
                 "chatId": None,
             },
-            "attachChart": True,
-            "chartTimeframe": "5m",
-            "chartLookbackMinutes": 500,
-            "chartTheme": "dark",
-            "chartImageWidth": 1600,
-            "chartImageHeight": 1200,
-            "chartImageScale": 2,
         }
 
     def _load_from_disk(self) -> Dict[str, Any]:

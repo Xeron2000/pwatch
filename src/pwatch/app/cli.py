@@ -72,6 +72,16 @@ def validate_positive_number(value: str, language: str) -> tuple[bool, float | s
         return False, get_prompt(language, "invalid_number")
 
 
+def validate_required_chat_id(value: str, language: str) -> tuple[bool, str]:
+    """Validate that Telegram chat ID is present and numeric."""
+    trimmed = value.strip()
+    if not trimmed:
+        return False, "Chat ID is required" if language == "en" else "Chat ID 为必填项"
+    if trimmed.lstrip("-").isdigit():
+        return True, trimmed
+    return False, "Chat ID must be numeric" if language == "en" else "Chat ID 必须为数字字符串"
+
+
 def get_validated_input(prompt: str, default: str, validator, language: str, secret: bool = False) -> str:
     """Get user input with validation."""
     while True:
@@ -100,10 +110,9 @@ def interactive_config():
 
     # Language selection
     print("\n" + "=" * 60)
-    print("Please select language / 请选择语言")
+    print(get_prompt("en", "language_select"))
     print("=" * 60)
-    print("1. English")
-    print("2. 中文")
+    print(get_prompt("en", "language_options"))
     print()
 
     lang_choice = input("Enter option [1]: ").strip() or "1"
@@ -171,7 +180,8 @@ def interactive_config():
     # ==================== Trading Pairs ====================
     print_section(get_prompt(language, "symbols_prompt"))
     print_help(get_prompt(language, "symbols_mode_help"))
-    print(f"   {get_prompt(language, 'symbols_format_help')}\n")
+    print(f"   {get_prompt(language, 'symbols_format_help')}")
+    print(f"   {get_prompt(language, 'symbols_hint')}\n")
 
     symbols_input = input("[auto]: ").strip()
 
@@ -197,17 +207,14 @@ def interactive_config():
     print_help(get_prompt(language, "telegram_chatid_help"))
     print(f"   {get_prompt(language, 'telegram_chatid_optional')}\n")
 
-    telegram["chatId"] = get_user_input(get_prompt(language, "telegram_chatid_prompt"), default="")
+    telegram["chatId"] = get_validated_input(
+        get_prompt(language, "telegram_chatid_prompt"),
+        default="",
+        validator=validate_required_chat_id,
+        language=language,
+    )
     config["telegram"] = telegram
 
-    # ==================== Chart Settings (defaults) ====================
-    config["attachChart"] = True
-    config["chartTimeframe"] = "5m"
-    config["chartLookbackMinutes"] = 500
-    config["chartTheme"] = "dark"
-    config["chartImageWidth"] = 1600
-    config["chartImageHeight"] = 1200
-    config["chartImageScale"] = 2
 
     # ==================== Advanced Configuration (Optional) ====================
     print_section(get_prompt(language, "advanced_config_prompt"))
@@ -237,19 +244,6 @@ def interactive_config():
         except ValueError:
             pass
 
-        # Chart detailed settings
-        print()
-        print_section(get_prompt(language, "chart_section"))
-
-        chart_theme = get_user_input("Chart theme (dark/light)", default="dark")
-        if chart_theme.lower() in ("dark", "light"):
-            config["chartTheme"] = chart_theme.lower()
-
-        chart_lookback = get_user_input("Chart lookback minutes", default="500")
-        try:
-            config["chartLookbackMinutes"] = int(chart_lookback)
-        except ValueError:
-            pass
 
     print("\n" + "=" * 60)
     print(f"✅ {get_prompt(language, 'config_complete')}")
@@ -266,7 +260,8 @@ def ensure_config_exists():
         logging.info(f"Configuration file exists: {config_file}")
         return config_file
 
-    print("\n⚠️  未找到配置文件，开始交互式配置...\n")
+    print("\n⚠️  No config file found. Starting interactive setup...")
+    print("⚠️  未找到配置文件，开始交互式配置...\n")
     config = interactive_config()
 
     import yaml
@@ -275,7 +270,9 @@ def ensure_config_exists():
     with config_file.open("w", encoding="utf-8") as f:
         yaml.safe_dump(config, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
 
+    print(f"✅ Config saved to: {config_file}")
     print(f"✅ 配置文件已保存: {config_file}")
+    print(f"📝 Edit this file later if needed: {config_file}")
     print(f"📝 如需修改，请编辑: {config_file}\n")
 
     return config_file
@@ -446,14 +443,19 @@ def cmd_run(args):
 
         config = load_config(config_path)
 
-        # Validate Telegram token before starting
+        # Validate Telegram credentials before starting
         if "telegram" in config.get("notificationChannels", []):
             if not _validate_telegram_token(config):
                 print("❌ Telegram token 无效或未配置")
                 print("请检查 ~/.config/pwatch/config.yaml 中的 telegram.token 设置")
                 print("格式: 123456789:ABCdefGHIjklMNOpqrsTUVwxyz")
                 sys.exit(1)
-            print("✅ Telegram token 验证通过")
+            telegram_chat_id = str(config.get("telegram", {}).get("chatId", "")).strip()
+            if not telegram_chat_id:
+                print("❌ Telegram chatId 未配置")
+                print("请检查 ~/.config/pwatch/config.yaml 中的 telegram.chatId 设置")
+                sys.exit(1)
+            print("✅ Telegram 配置验证通过")
 
 
         print("📊 正在验证市场数据...")

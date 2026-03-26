@@ -162,30 +162,14 @@ notificationSymbols:
 #    获取群组 ID / For group ID: 将机器人加入群组后发送消息
 #                                Add bot to group and send a message
 #
-# ⚠️ chatId 是可选的 / chatId is optional
-#    用作回退通道（当用户未与机器人对话时使用）
-#    Used as fallback channel (when user hasn't messaged the bot)
-#
+# ⚠️ chatId 是必填的 / chatId is required
+#    用于发送 Telegram 通知
+#    Required for Telegram delivery
+
 telegram:
   token: "YOUR_TELEGRAM_BOT_TOKEN"
   chatId: "123456789"
-  # webhookSecret: "YOUR_WEBHOOK_SECRET"  # 可选，使用 Webhook 时填写 / Optional, for Webhook
 
-
-# ┌─────────────────────────────────────────────────────────────────────────────┐
-# │                          图表设置 / Chart Settings                           │
-# └─────────────────────────────────────────────────────────────────────────────┘
-
-# 是否在通知中附带价格图表 / Attach price chart to notifications
-attachChart: true
-
-# 图表渲染设置 / Chart rendering settings (attachChart 为 true 时生效 / when attachChart is true)
-chartTimeframe: "5m"           # 图表时间周期 / Chart timeframe
-chartLookbackMinutes: 500      # 回溯时间(分钟) / Lookback period (minutes)
-chartTheme: "dark"             # 主题 / Theme: "dark" | "light"
-chartImageWidth: 1600          # 图片宽度 / Image width (pixels)
-chartImageHeight: 1200         # 图片高度 / Image height (pixels)
-chartImageScale: 2             # 缩放比例 / Scale factor
 
 
 # ┌─────────────────────────────────────────────────────────────────────────────┐

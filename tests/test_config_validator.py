@@ -25,14 +25,6 @@ class TestConfigValidator:
             "telegram": {"token": "123456789:ABCdef123456", "chatId": "123456789"},
             "notificationTimezone": "Asia/Shanghai",
             "logLevel": "INFO",
-            "attachChart": True,
-            "chartTimeframe": "1m",
-            "chartLookbackMinutes": 60,
-            "chartTheme": "dark",
-            "chartIncludeMA": [7, 25],
-            "chartImageWidth": 1600,
-            "chartImageHeight": 1200,
-            "chartImageScale": 2,
         }
 
         result = config_validator.validate_config(config)
@@ -47,7 +39,6 @@ class TestConfigValidator:
         assert not result.is_valid
         assert len(result.errors) > 0
 
-        # Check for specific required field errors
         error_messages = [str(error) for error in result.errors]
         assert any("exchange" in msg.lower() for msg in error_messages)
         assert any("timeframe" in msg.lower() for msg in error_messages)
@@ -115,7 +106,7 @@ class TestConfigValidator:
             "exchanges": ["binance", "okx"],
             "defaultTimeframe": "5m",
             "checkInterval": "1m",
-            "defaultThreshold": 150.0,  # Above max value
+            "defaultThreshold": 150.0,
             "symbolsFilePath": "config/symbols.txt",
             "notificationChannels": ["telegram"],
             "notificationSymbols": ["BTC/USDT:USDT"],
@@ -169,7 +160,7 @@ class TestConfigValidator:
     def test_valid_file_path(self):
         """Test validation of valid file path."""
         with tempfile.NamedTemporaryFile(mode="w", delete=False) as f:
-            f.write("test content")
+            _ = f.write("test content")
             temp_path = f.name
 
         try:
@@ -217,9 +208,8 @@ class TestConfigValidator:
         assert "defaultTimeframe" in schema
         assert "checkInterval" in schema
         assert "telegram" in schema
-        assert "chartImageWidth" in schema
+        assert "chartImageWidth" not in schema
 
-        # Check schema structure
         exchange_schema = schema["exchange"]
         assert "required" in exchange_schema
         assert "type" in exchange_schema
@@ -241,8 +231,8 @@ class TestConfigValidator:
         assert result.warnings[0] == "Test warning"
         assert result.info[0] == "Test info"
 
-    def test_partial_valid_configuration(self):
-        """Test validation with warnings but no errors."""
+    def test_partial_valid_configuration_without_chart_fields(self):
+        """Config without optional chart fields remains valid and warning-free."""
         config = {
             "exchange": "binance",
             "exchanges": ["binance", "okx"],
@@ -250,17 +240,13 @@ class TestConfigValidator:
             "checkInterval": "1m",
             "defaultThreshold": 1.0,
             "symbolsFilePath": "config/symbols.txt",
-            "notificationChannels": [],  # Empty to avoid requiring telegram config
-            "attachChart": True,
-            # Missing chart configuration - should generate warnings
+            "notificationChannels": [],
             "notificationSymbols": ["BTC/USDT:USDT"],
         }
 
         result = config_validator.validate_config(config)
-        # This should be valid but with warnings
         assert result.is_valid
-        assert len(result.warnings) > 0
-        assert any("chart" in str(warning).lower() for warning in result.warnings)
+        assert result.warnings == []
 
     def test_valid_auto_mode_quality_filter_configuration(self):
         config = {
@@ -319,7 +305,8 @@ class TestConfigValidator:
         result = config_validator.validate_config(config)
         assert result.is_valid
 
-    def test_invalid_auto_mode_profile_configuration(self):
+
+    def test_missing_telegram_chat_id_is_invalid_when_telegram_enabled(self):
         config = {
             "exchange": "binance",
             "exchanges": ["binance", "okx"],
@@ -327,11 +314,16 @@ class TestConfigValidator:
             "checkInterval": "1m",
             "defaultThreshold": 1.0,
             "notificationChannels": ["telegram"],
-            "notificationSymbols": "auto",
-            "autoModeProfile": "wild-west",
-            "telegram": {"token": "123456789:ABCdef123456", "chatId": "123456789"},
+            "notificationSymbols": ["BTC/USDT:USDT"],
+            "telegram": {"token": "123456789:ABCdef123456", "chatId": ""},
         }
 
         result = config_validator.validate_config(config)
+
         assert not result.is_valid
-        assert any("automodeprofile" in str(error).lower() for error in result.errors)
+        assert any("chat id" in str(error).lower() for error in result.errors)
+
+    def test_webhook_secret_removed_from_schema(self):
+        schema = config_validator.get_config_schema()
+
+        assert "webhookSecret" not in schema.get("telegram", {})

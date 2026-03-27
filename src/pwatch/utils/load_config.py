@@ -5,8 +5,6 @@ import yaml
 
 from pwatch.paths import get_config_path, get_symbols_path
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
-
 
 def load_config(configPath=None):
     """

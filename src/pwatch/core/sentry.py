@@ -379,6 +379,10 @@ class PriceSentry:
                 sym_events[ev.event_type] = ev
 
         for symbol, sym_events in by_symbol.items():
+            if not notification_cooldown.should_notify(symbol):
+                logging.info("Skipping realtime alert for %s; notification cooldown active", symbol)
+                continue
+
             has_price_confirmation = bool(
                 sym_events.get("price_velocity") or sym_events.get("batch_move")
             )

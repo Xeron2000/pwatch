@@ -4,6 +4,7 @@ import logging
 import time
 
 import websockets
+from websockets.exceptions import ConnectionClosed
 
 from .base import BaseExchange
 
@@ -69,8 +70,10 @@ class OkxExchange(BaseExchange):
 
         max_retries = 3
         retry_count = 0
+        established_once = False
 
         while retry_count < max_retries and self.running:
+
             try:
                 uri = "wss://ws.okx.com:8443/ws/v5/public"
                 logging.debug(f"OKX WebSocket URI: {uri}")
@@ -90,9 +93,15 @@ class OkxExchange(BaseExchange):
 
                 logging.debug(f"Subscription message: {subscribe_msg}")
 
-                async with websockets.connect(uri) as websocket:
+                async with websockets.connect(
+                    uri,
+                    ping_interval=20,
+                    ping_timeout=20,
+                    close_timeout=10,
+                ) as websocket:
                     self.ws = websocket
                     self.ws_connected = True
+                    established_once = True
                     logging.info("OKX WebSocket connection established")
 
                     # Send subscription request
@@ -137,6 +146,9 @@ class OkxExchange(BaseExchange):
                                     vol = item.get("vol24h")
                                     if vol:
                                         self._notify_detectors_volume(symbol, float(vol))
+                        except ConnectionClosed as exc:
+                            logging.warning("OKX WebSocket recv closed: %s", exc)
+                            break
                         except Exception as e:
                             logging.error(f"OKX WebSocket data processing error: {e}")
                             break
@@ -152,5 +164,5 @@ class OkxExchange(BaseExchange):
                 retry_count += 1
                 await asyncio.sleep(5)  # Wait 5 seconds before retrying
 
-        if not self.ws_connected:
+        if not self.ws_connected and not established_once:
             logging.error(f"Unable to establish WebSocket connection after {max_retries} attempts")

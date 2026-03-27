@@ -462,9 +462,10 @@ class TestPriceSentry:
         ), patch("pwatch.core.sentry.Notifier", return_value=mock_notifier), patch(
             "pwatch.core.sentry.load_usdt_contracts", return_value=["BTC/USDT:USDT"]
         ), patch("pwatch.core.sentry.parse_timeframe", return_value=5), patch(
-            "pwatch.core.sentry.logging"
-        ):
+            "pwatch.core.sentry.notification_cooldown"
+        ) as mock_cooldown, patch("pwatch.core.sentry.logging"):
             sentry = PriceSentry()
+            mock_cooldown.should_notify.return_value = True
             mock_notifier.send.return_value = {
                 "success": True,
                 "reason": "sent",
@@ -494,7 +495,78 @@ class TestPriceSentry:
 
             await sentry._process_anomaly_events()
 
+            mock_cooldown.should_notify.assert_called_once_with("BTC/USDT:USDT")
             mock_notifier.send.assert_called_once()
             sent_message = mock_notifier.send.call_args.args[0]
             assert "Volume:" in sent_message
             assert "量能确认" in sent_message
+
+    @pytest.mark.asyncio
+    async def test_process_anomaly_events_respects_notification_cooldown(
+        self, sample_config, mock_exchange, mock_notifier
+    ):
+        with patch("pwatch.core.sentry.load_config", return_value=sample_config), patch(
+            "pwatch.core.sentry.get_exchange", return_value=mock_exchange
+        ), patch("pwatch.core.sentry.Notifier", return_value=mock_notifier), patch(
+            "pwatch.core.sentry.load_usdt_contracts", return_value=["BTC/USDT:USDT"]
+        ), patch("pwatch.core.sentry.parse_timeframe", return_value=5), patch(
+            "pwatch.core.sentry.notification_cooldown"
+        ) as mock_cooldown, patch("pwatch.core.sentry.logging"):
+            sentry = PriceSentry()
+            mock_cooldown.should_notify.return_value = False
+            sentry._anomaly_events.put(
+                AnomalyEvent(
+                    symbol="BTC/USDT:USDT",
+                    event_type="price_velocity",
+                    severity="MEDIUM",
+                    data={
+                        "change_pct": 0.8,
+                        "window_seconds": 30,
+                        "price_from": 100.0,
+                        "price_to": 100.8,
+                    },
+                )
+            )
+
+            await sentry._process_anomaly_events()
+
+            mock_cooldown.should_notify.assert_called_once_with("BTC/USDT:USDT")
+            mock_notifier.send.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_process_anomaly_events_records_cooldown_after_realtime_send(
+        self, sample_config, mock_exchange, mock_notifier
+    ):
+        with patch("pwatch.core.sentry.load_config", return_value=sample_config), patch(
+            "pwatch.core.sentry.get_exchange", return_value=mock_exchange
+        ), patch("pwatch.core.sentry.Notifier", return_value=mock_notifier), patch(
+            "pwatch.core.sentry.load_usdt_contracts", return_value=["BTC/USDT:USDT"]
+        ), patch("pwatch.core.sentry.parse_timeframe", return_value=5), patch(
+            "pwatch.core.sentry.notification_cooldown"
+        ) as mock_cooldown, patch("pwatch.core.sentry.logging"):
+            sentry = PriceSentry()
+            mock_cooldown.should_notify.return_value = True
+            mock_notifier.send.return_value = {
+                "success": True,
+                "reason": "sent",
+                "retryable": False,
+            }
+            sentry._anomaly_events.put(
+                AnomalyEvent(
+                    symbol="BTC/USDT:USDT",
+                    event_type="price_velocity",
+                    severity="MEDIUM",
+                    data={
+                        "change_pct": 0.8,
+                        "window_seconds": 30,
+                        "price_from": 100.0,
+                        "price_to": 100.8,
+                    },
+                )
+            )
+
+            await sentry._process_anomaly_events()
+
+            mock_cooldown.should_notify.assert_called_once_with("BTC/USDT:USDT")
+            mock_notifier.send.assert_called_once()
+            mock_cooldown.record_notification.assert_called_once_with("BTC/USDT:USDT", 300)
